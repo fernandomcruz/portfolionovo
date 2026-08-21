@@ -268,8 +268,22 @@ const BASELINE_LOCAL = CAP_HEIGHT + TOP_PAD;
 let TRIGGER_START = window.innerHeight; // começa assim que o .conteudo entra na tela
 const TRIGGER_END = 140;
 
+/* A onda é sempre 1,5 ciclos na largura da tela, e é daí que vinha o problema
+   no celular: em 1440px cada ciclo tem 960px de comprimento para 240px de
+   altura — uma curva mansa. Em 390px o mesmo 1,5 ciclos dá 260px de
+   comprimento para os MESMOS 240px de altura. A onda não fica menor, fica
+   ESPREMIDA: vira um bico.
+
+   A altura passa a acompanhar a largura, então a proporção entre comprimento
+   e altura se mantém e a curva continua com o mesmo temperamento em qualquer
+   tela. De 1200px pra cima nada muda — o desktop é exatamente o que já era. */
+function amplitudeDaTela(width){
+  const fator = Math.min(1, width / 1200);
+  return MAX_AMPLITUDE * fator;
+}
+
 function buildCapWavePath(progress, width){
-  const rise = (MAX_AMPLITUDE / 2) * Math.pow(progress, 2);
+  const rise = (amplitudeDaTela(width) / 2) * Math.pow(progress, 2);
   const segments = 60;
   let d = `M0,${FLOOR_Y} L0,${BASELINE_LOCAL}`;
 
@@ -345,20 +359,36 @@ let hsTicking = false;
 
 const EXTRA_PIN_VH = 0.2; // nº de telas extras de pausa antes do .stack começar a subir — ajuste aqui
 
-function hsLayout(){
-  /* No mobile o CSS troca o pin por um scroll horizontal nativo e zera a
-     altura (`.hs-outer { height: auto }`). Só que style inline VENCE qualquer
-     regra de folha de estilo: a altura de 620vh continuava aplicada por cima
-     da media query, e como o .hs-sticky ali tem só 1 tela de altura, sobravam
-     mais de 4000px de branco pra rolar até chegar nos projetos.
-     Limpar o inline devolve o controle pro CSS. */
-  if (window.innerWidth <= 768) {
-    hsOuter.style.height = '';
-    return;
-  }
+/* O pin vale em TODAS as larguras agora. Antes havia um desvio aqui que, no
+   celular, limpava a altura e deixava o CSS trocar o efeito por rolagem
+   horizontal nativa. O fallback saiu do CSS, então o desvio saiu daqui junto —
+   se um dos dois ficasse para trás, a seção ficaria com uma altura enorme e
+   nenhum movimento dentro, ou seja, várias telas de branco.
 
-  // panels telas p/ scroll horizontal + 1 tela de pin padrão + EXTRA_PIN_VH telas de pausa
-  hsOuter.style.height = `${(hsPanelCount + 1 + EXTRA_PIN_VH) * 100}vh`;
+   POR QUE A ALTURA NÃO É MAIS "TANTAS TELAS":
+
+   A conta antiga reservava um número fixo de alturas de tela para o percurso
+   horizontal. O problema é que o percurso horizontal se mede em LARGURAS, e a
+   proporção entre a largura e a altura da tela muda muito entre um monitor e
+   um celular. No desktop davam 4 x 1425px de caminho para 3600px de rolagem:
+   1,58px de painel para cada pixel rolado. No celular o mesmo esquema dava
+   4 x 390px de caminho para 3376px de rolagem — 0,46. Ou seja, o mesmo gesto
+   de dedo movia os painéis TRÊS VEZES E MEIA menos, e a seção parecia pesada,
+   emperrada, como se o site tivesse travado ali.
+
+   Agora a altura sai do caminho a percorrer, e não do formato da tela: o
+   ritmo é o mesmo em qualquer aparelho. O 1,58 é exatamente a proporção que o
+   desktop já tinha, então lá nada muda. */
+const VELOCIDADE_PAINEL = 1.58;   // px de painel por px de rolagem
+
+function hsLayout(){
+  const H = window.innerHeight;
+  const percurso = (hsPanelCount - 1) * window.innerWidth;
+  const rolagemHorizontal = percurso / VELOCIDADE_PAINEL;
+
+  // + 1 tela de pin padrão + EXTRA_PIN_VH telas de pausa + a própria tela presa
+  hsOuter.style.height =
+    `${Math.round(rolagemHorizontal + H * (1 + EXTRA_PIN_VH) + H)}px`;
 }
 
 /* Escreve em cada painel marcado com [data-progresso] quanto dele já
@@ -417,11 +447,6 @@ function hsRender(){
 }
 
 function hsUpdate(){
-  if (window.innerWidth <= 768) {
-    hsTrack.style.transform = '';
-    return;
-  }
-
   const rect = hsOuter.getBoundingClientRect();
   const total = hsOuter.offsetHeight - window.innerHeight;
 
@@ -443,27 +468,10 @@ atualizarProgressoPaineis();
 
 window.addEventListener('scroll', hsUpdate, { passive: true });
 
-/* no mobile o pin não existe: quem rola é o próprio .hs-sticky, e o evento
-   de scroll dele não sobe pra window */
-const hsSticky = document.querySelector('.hs-sticky');
-if (hsSticky) {
-  hsSticky.addEventListener('scroll', atualizarProgressoPaineis, { passive: true });
-
-  /* A dica "arraste →" (CSS, no .hs-outer::after) só existe no celular, onde o
-     trilho vira rolagem horizontal nativa e nada mais conta isso. Ela some no
-     primeiro arrasto: quem já entendeu não precisa continuar sendo avisado.
-     Marca uma vez e desliga o próprio ouvinte — some, e não volta. */
-  const hsOuter = document.getElementById('hsOuter');
-  if (hsOuter) {
-    const esconderDica = () => {
-      if (hsSticky.scrollLeft > 12) {
-        hsOuter.classList.add('ja-arrastou');
-        hsSticky.removeEventListener('scroll', esconderDica);
-      }
-    };
-    hsSticky.addEventListener('scroll', esconderDica, { passive: true });
-  }
-}
+/* O .hs-sticky não rola mais sozinho em largura nenhuma — quem move os
+   painéis é sempre o pin, comandado pelo scroll da janela. O ouvinte de
+   scroll dele e a dica "arraste →" saíram junto com o fallback: não há mais
+   arrasto lateral pra ouvir, e avisar pra arrastar seria mentira. */
 
 window.addEventListener('scroll', atualizarProgressoPaineis, { passive: true });
 window.addEventListener('resize', atualizarProgressoPaineis);
@@ -573,10 +581,44 @@ window.addEventListener('resize', () => {
     };
   }
 
+  /* Os deslocamentos do data-ancora foram medidos no olho com a palavra no
+     corpo que ela tem numa tela de ~1440px: 230,4px. Eles são px ABSOLUTOS, e
+     era daí que vinha o problema no celular — lá a palavra tem uns 50px, mas
+     um "+162px" continuava valendo 162px. Isso joga a flor a três larguras de
+     letra de distância do ponto onde ela deveria encostar.
+
+     Escalando pelo corpo da letra, o mesmo número passa a significar "tantas
+     letras de distância" em vez de "tantos pixels", e o encaixe se mantém em
+     qualquer tela. Em 1440px a conta dá 1 e nada muda do que já estava
+     calibrado; em telas maiores as flores acompanham a palavra crescendo, o
+     que antes também não acontecia. */
+  const FONTE_DE_REFERENCIA = 230.4;
+
+  function escalaDoTexto(){
+    const fs = parseFloat(getComputedStyle(letras[0]).fontSize);
+    return fs > 0 ? fs / FONTE_DE_REFERENCIA : 1;
+  }
+
+  /* A referência é o .jardim, NÃO o painel. As flores são filhas dele e o
+     `left` delas conta a partir da borda dele — e no celular ele não coincide
+     com o painel: leva `inset: 0 11%`, ou seja, começa 43px pra dentro numa
+     tela de 390. Medindo pelo painel, todas nasciam 43px à direita do lugar.
+     No desktop o inset é 0 e os dois são a mesma caixa, então lá não muda
+     nada. */
+  const jardim = painel.querySelector('.jardim');
+
   function posicionar(){
-    const rp = painel.getBoundingClientRect();
+    const rp = (jardim || painel).getBoundingClientRect();
     if (!rp.width) return;                 // painel ainda sem caixa
 
+    const k = escalaDoTexto();
+
+    /* O tamanho da flor acompanha o tamanho da palavra pelo mesmo fator do
+       deslocamento. Antes era um `--escala: .40` fixo no CSS, calibrado no
+       olho: com ele a flor rosa dava 3,8 larguras de letra no celular contra
+       2,07 no desktop — quase o dobro, e era isso que fazia ela engolir
+       metade de "DESIGN". Com o fator, dá 2,10: o mesmo do desktop. */
+    if (jardim) jardim.style.setProperty('--escala', k.toFixed(4));
     const I = tinta(h2, 'I');
     const S = tinta(letras[2], 'S');
     const N = tinta(letras[5], 'N');
@@ -599,8 +641,8 @@ window.addEventListener('resize', () => {
       const meio = tam * escala / 2;
 
       // --e e --t são o CENTRO da flor (o margin negativo já desconta a metade)
-      const cx = p.x - rp.left + Number(dx) + (f.dataset.borda === 'esq' ? meio : 0);
-      const cy = p.y - rp.top + Number(dy);
+      const cx = p.x - rp.left + Number(dx) * k + (f.dataset.borda === 'esq' ? meio : 0);
+      const cy = p.y - rp.top + Number(dy) * k;
 
       f.style.setProperty('--e', Math.round(cx) + 'px');
       f.style.setProperty('--t', Math.round(cy) + 'px');

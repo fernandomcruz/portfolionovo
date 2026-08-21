@@ -187,14 +187,32 @@ body{
   padding-top: 50px;
 }
 
+/* A altura da faixa e a margem negativa TÊM que ser o mesmo número: a margem
+   é o que puxa a seção branca por cima do hero, e a altura é o espaço que a
+   onda tem pra existir. Por isso as duas saem de uma variável só.
+
+   O SVG usa preserveAspectRatio="none", então ele é esticado até esta altura.
+   Ou seja: este valor não é só o tamanho da faixa, é o quanto a onda é
+   esticada na vertical. */
 .wave-cap{
+  --altura-onda: 354px;
+
   position: relative;
-  margin-top: -354px;
-  height: 354px;
+  margin-top: calc(var(--altura-onda) * -1);
+  height: var(--altura-onda);
   width: 100%;
   z-index: 2;
   pointer-events: none;
   overflow: visible;
+}
+
+/* No celular 354px são mais de 40% da tela só de transição, e como o SVG é
+   esticado até essa altura a onda ainda ganhava altura de sobra justamente
+   onde ela já estava espremida na horizontal. Encolhendo a faixa, a curva
+   volta a ter a mansidão que tem no desktop e a transição para de ocupar
+   meia tela. */
+@media (max-width: 900px){
+  .wave-cap{ --altura-onda: clamp(190px, 34vw, 290px); }
 }
 
 .wave-cap svg{
@@ -223,6 +241,11 @@ body{
   position: sticky;
   top: 0;
   height: 100vh;
+  /* svh = altura da tela COM a barra do navegador aparecendo, que é a menor
+     que ela pode ter. No celular a barra some e volta conforme se rola, e com
+     `vh` o painel preso mudava de altura no meio do movimento. Com svh ele
+     fica quieto. Navegador antigo ignora a linha e continua no vh acima. */
+  height: 100svh;
   overflow: hidden;
 }
 
@@ -262,26 +285,40 @@ body{
    Pra ter um long shadow legível ali, ele precisa ser curto (uns 8 passos,
    até ~0.4em) e mais claro que o texto, não da mesma cor. */
 
+/* OS TRÊS TAMANHOS SAEM DE UM SÓ.
+
+   Antes cada um tinha o seu clamp, e todos com piso de 24px. No desktop isso
+   dava 228 / 85,5 / 28,5 — a hierarquia que o painel precisa. No celular os
+   três batiam no piso ao mesmo tempo: o h2 e o h3 ficavam AMBOS em 24px, ou
+   seja, "More" e "THAN A" do mesmo tamanho, e o "I" quase do tamanho da
+   palavra embaixo. A composição desmontava.
+
+   Agora o corpo do h1 manda, e os outros dois são fração dele. As frações
+   (0,375 e 0,125) são exatamente as que o desktop já tinha, então lá nada
+   muda. O `max` é só piso de legibilidade: no celular a fração pura daria
+   6px no h3. */
 .texto{
+  --corpo: clamp(24px, 16vw, 30rem);
+
   margin: 0 0 0 50px;
   color: var(--bg);
 }
 
 .texto h3{
-  font-size: clamp(24px, 2vw, 10rem);
+  font-size: max(12px, calc(var(--corpo) * 0.125));
   margin: 0;
   line-height: 0.8;
 }
 
 .texto h2{
-  font-size: clamp(24px, 6vw, 10rem);
+  font-size: max(19px, calc(var(--corpo) * 0.375));
   margin: 0;
   line-height: 0.8;
   font-weight: 900;
 }
 
 .texto h1{
-  font-size: clamp(24px, 16vw, 30rem);
+  font-size: var(--corpo);
   margin: 0;
   line-height: 0.8;
   font-weight: 900;
@@ -639,26 +676,24 @@ body{
   .build-barra i{ transform: scaleX(1); }
 }
 
-/* fallback mobile: vira scroll horizontal nativo */
-@media (max-width: 768px){
-  .hs-outer{ height: auto; }
-  .hs-sticky{
-    position: static;
-    height: auto;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;              /* esconde a barra sem perder o gesto */
-  }
-  .hs-sticky::-webkit-scrollbar{ display: none; }
-  .hs-track{ transform: none !important; width: max-content; }
-  .hs-panel{ scroll-snap-align: start; }
+/* O CELULAR AGORA TEM O MESMO PIN DO DESKTOP.
 
+   Aqui existia um fallback que trocava o pin por rolagem horizontal nativa:
+   a seção virava uma faixa comum e os painéis andavam de lado no arrasto do
+   dedo. Funcionava mecanicamente — medi o container rolando 1950px de
+   conteúdo em 390px de tela — mas não era o mesmo efeito. No desktop os
+   painéis atravessam a tela ENQUANTO SE ROLA A PÁGINA PRA BAIXO, e nada
+   avisava que no celular era preciso arrastar de lado. Na prática, quem
+   descia a página passava reto pela seção sem ver os painéis andarem.
+
+   Com o fallback removido, o pin do desktop passa a valer aqui também.
+   Sobrou desta media query só o que continua sendo problema de tela pequena:
+   o corpo das fontes. */
+@media (max-width: 768px){
   /* os painéis usam fontes de até 16vw: no celular "DEVELOPER" estourava a
      largura da tela e ficava cortado pela metade */
   .hs-panel--mid .texto{ margin-left: 40px; }
   .texto{ margin-left: 24px; }
-  .texto h1{ font-size: clamp(24px, 13vw, 30rem); }
 }
 
 /* =========================================================================
@@ -739,27 +774,31 @@ body{
   padding-top: 60px;
   padding-bottom: 100px;
   position: relative;
-  min-height: 100vh;
+  min-height: 100svh;
   width: 100%;
   background: var(--bg);
-  margin-top: 0;
   z-index: 100;
   box-shadow: 0 -20px 50px rgba(0, 0, 0, 0.4);
 }
 
-@media (min-width: 769px){
-  .projetos{
-    margin-top: -100vh;
+/* O margin negativo é o que faz os projetos SUBIREM POR CIMA do último painel
+   enquanto ele fica preso atrás — é o efeito de uma seção cobrindo a outra.
 
-    /* A seção é obrigada a ter 100vh — é ela que cobre a tela de pausa do pin
-       (o margin-top negativo acima). Só que o índice ocupa bem menos que
-       isso, e centralizar no meio dessa altura jogava o título pra 222px do
-       topo, baixo demais.
-       Com o respiro de baixo bem maior que o de cima, a centralização passa a
-       cair mais acima: o bloco sobe e o título fica por volta de 115px. */
-    padding-top: 40px;
-    padding-bottom: clamp(140px, 36vh, 330px);
-  }
+   Isto vivia atrás de um `min-width: 769px` porque no celular não havia pin
+   nenhum: sem a seção presa, a mesma margem subia os projetos por cima do
+   "MORE THAN A DEVELOPER" e engolia a seção inteira. Agora que o pin vale em
+   qualquer largura, a trava saiu e o celular ganha o mesmo encavalamento. */
+.projetos{
+  margin-top: -100svh;
+
+  /* A seção é obrigada a ter uma tela de altura — é ela que cobre a tela de
+     pausa do pin (o margin negativo acima). Só que o índice ocupa bem menos
+     que isso, e centralizar no meio dessa altura jogava o título pra 222px do
+     topo, baixo demais.
+     Com o respiro de baixo bem maior que o de cima, a centralização passa a
+     cair mais acima: o bloco sobe e o título fica por volta de 115px. */
+  padding-top: 40px;
+  padding-bottom: clamp(140px, 36vh, 330px);
 }
 
 .portfolio-gallery{
@@ -1515,12 +1554,19 @@ body{
   margin-bottom: -18px;
 }
 
+/* O vão entre os itens e o padding da direita PRECISAM ser o mesmo número: a
+   faixa repete o conteúdo pra rolar sem emenda, e é esse padding que faz o
+   último item guardar a mesma distância do primeiro da cópia seguinte. Se os
+   dois se separarem, aparece um salto na volta do laço. Por isso, uma
+   variável só. */
 .stack-marquee-track{
+  --vao: 48px;
+
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  gap: 48px;
-  padding-right: 48px;
+  gap: var(--vao);
+  padding-right: var(--vao);
 }
 
 .stack-marquee:hover .stack-marquee-track{
@@ -2319,17 +2365,14 @@ body{
   margin: clamp(-64px, -3.6vw, -26px) 0 -14px;
   line-height: 0;                 /* tira o espaço fantasma embaixo da img */
 
-  filter:
-    /* a projetada: deslocada e com raio curto, pra dar pra ver que é o
-       contorno de uma pessoa e não um brilho espalhado 
-    drop-shadow(26px 18px 12px rgba(217, 255, 0, .22))
-    /* um segundo passe, mais aberto e bem fraco, só pra sombra não terminar
-       num corte duro — é o que uma penumbra faz 
-    drop-shadow(30px 22px 26px rgba(217, 255, 0, .10));*/
+  /* Aqui já esteve uma sombra verde projetada. Ela saiu: numa seção quase
+     preta, sombra clara não lê como sombra, lê como um brilho colorido atrás
+     da pessoa. Sem nada atrás, o recorte se resolve sozinho — o moletom é
+     branco sobre preto e já tem contraste de sobra. */
 }
 
 .bio-retrato img{
-  position: relative;             /* acima do halo */
+  position: relative;
   display: block;
   width: 100%;
   height: auto;
@@ -2350,33 +2393,68 @@ body{
   .bio-retrato:hover img{ filter: saturate(1.12) contrast(1.06) brightness(1.05); }
 }
 
-/* A entrada acompanha o scroll, igual ao texto logo abaixo: a mesma técnica
-   de animação pausada com atraso negativo. Ela fecha em --prog .45 — bem
-   antes do parágrafo — porque a foto vem primeiro na leitura.
+/* A ENTRADA — revela de baixo para cima, uma vez só
 
-   Só anima sob .retrato-scrub, classe que o JS põe. Sem script, sem classe,
-   e a foto simplesmente aparece: nada aqui esconde conteúdo sozinho. */
-.bio-animada.retrato-scrub .bio-retrato img{
-  /* A curva importa mais aqui do que numa animação normal. Com um ease-out
-     comum, medi a foto já 89% erguida com só 15% do percurso rolado: o
-     movimento acabava antes de a pessoa perceber que ele existia. Esta curva
-     começa devagar e distribui a subida ao longo do caminho, que é o ponto de
-     uma animação comandada pelo scroll — ela tem que durar o scroll. */
-  animation: retratoEntra .55s cubic-bezier(.45, .06, .4, 1) both paused;
-  animation-delay: calc(var(--prog, 0) * -1s);
+   Esta foto NÃO é mais comandada pelo scroll, e a diferença é o pedido. Presa
+   ao scroll, ela anda pra frente e pra trás conforme se rola e fica parada no
+   meio do caminho se a pessoa parar no meio — vive num estado intermediário.
+   Agora ela dispara quando entra na tela e roda inteira, no ritmo dela, sem
+   desfazer.
+
+   E o gesto é REVELAR, não deslizar. O clip-path abre uma janela que cresce da
+   base para o topo: `inset(100% 0 0 0)` não mostra nada, e conforme o recorte
+   de cima diminui a área visível sobe a partir da borda de baixo. A foto vai
+   surgindo — primeiro a barra do moletom, depois o tronco, por último o rosto.
+   Os 34px que sobem junto são só para o movimento ter peso; quem faz o efeito
+   é a janela.
+
+   Só esconde sob .retrato-pronto, classe que o JS coloca. Sem script, sem
+   classe: a foto aparece normalmente. */
+.bio-retrato.retrato-pronto img{
+  opacity: 0;
+  clip-path: inset(100% 0 0 0);
 }
 
-/* Ela SOBE para dentro do lugar. Antes eram 26px com um leve zoom, e isso não
-   lia como subir: lia como aparecer. O zoom saiu (encolher e crescer é outro
-   gesto, e disputava com o movimento) e o percurso subiu para 78px, que numa
-   foto de ~430px de altura é o bastante para o olho acompanhar a viagem. */
-@keyframes retratoEntra{
-  from{ opacity: 0; transform: translateY(78px); }
-  to  { opacity: 1; transform: translateY(0);    }
+.bio-retrato.retrato-entra img{
+  animation: retratoRevela 1.15s cubic-bezier(.22, .68, .24, 1) .06s both;
+}
+
+/* O CAMINHO INDEPENDENTE, se a animação não rodar.
+
+   O `animation: none` aqui não é sobra: é o que faz a rede de segurança
+   funcionar. Animação com fill-mode `both` GANHA de declaração comum na
+   cascata, então pôr opacity: 1 sozinho não devolvia nada — a foto continuava
+   presa no primeiro quadro da animação, invisível. Medi exatamente isso: as
+   três classes aplicadas e a imagem ainda em opacity 0.
+
+   Cancelando a animação, as declarações abaixo passam a valer. Quando ela roda
+   normal já terminou muito antes deste caminho entrar (1,21s contra 2,2s),
+   então o estado final é o mesmo e não se vê troca nenhuma. */
+.bio-retrato.retrato-visivel img{
+  animation: none;
+  opacity: 1;
+  clip-path: inset(0 0 0 0);
+}
+
+@keyframes retratoRevela{
+  from{
+    opacity: 0;
+    clip-path: inset(100% 0 0 0);
+    transform: translateY(34px);
+  }
+  to{
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+    transform: translateY(0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce){
-  .bio-animada.retrato-scrub .bio-retrato img{ animation: none; }
+  .bio-retrato.retrato-pronto img{
+    opacity: 1;
+    clip-path: none;
+    animation: none;
+  }
 }
 
 .contato-label{
@@ -2621,8 +2699,16 @@ body{
 @media (max-width: 900px){
   .contato{ padding: 80px 6vw 40px; }
   .contato-grid{ grid-template-columns: 1fr; gap: 56px; }
-  .contato-actions{ align-items: flex-start; }
-  .cv-button{ margin: 0; }
+  /* Os botões voltam ao centro. Eles estavam encostados na esquerda para
+     acompanharem o texto quando as duas colunas viram uma só — mas os quatro
+     cubos e o botão do currículo têm larguras diferentes entre si, e
+     alinhados à esquerda a borda direita ficava toda serrilhada. Centrados,
+     o bloco fecha como um bloco. */
+  .contato-actions{ align-items: center; }
+  .cv-button{ margin: 0 auto; }
+  /* os quatro cubos não têm exatamente a mesma largura (302 a 306px), então
+     sem isto eles ficavam uns 2px fora do eixo uns dos outros */
+  .social-row{ align-items: center; }
 }
 
 @media (max-width: 600px){
@@ -2801,41 +2887,13 @@ body{
    fica com um aviso pendurado na tela.
    ------------------------------------------------------------------------- */
 
+/* A dica "arraste →" que morava aqui saiu junto com o fallback de rolagem
+   nativa: agora os painéis andam com o scroll da página, como no desktop, e
+   não há arrasto lateral nenhum pra avisar. */
 @media (max-width: 768px){
-  .hs-outer{ position: relative; }
-
-  .hs-outer::after{
-    content: 'arraste  →';
-    position: absolute;
-    left: 50%;
-    bottom: 22px;
-    transform: translateX(-50%);
-    padding: 7px 15px;
-    border: 1px solid rgba(241, 236, 225, .28);
-    border-radius: 999px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    letter-spacing: .22em;
-    text-transform: uppercase;
-    color: rgba(241, 236, 225, .6);
-    pointer-events: none;
-    animation: dicaArraste 2.4s ease-in-out infinite;
-    transition: opacity .4s ease;
-  }
-
-  .hs-outer.ja-arrastou::after{ opacity: 0; }
-
-  @keyframes dicaArraste{
-    0%, 100%{ transform: translateX(-50%); }
-    50%     { transform: translateX(calc(-50% + 7px)); }
-  }
-
-  .texto{ margin-left: var(--gutter); }
+  /* mexer no --corpo desce os três juntos, mantendo a proporção */
+  .texto{ margin-left: var(--gutter); --corpo: clamp(24px, 13vw, 30rem); }
   .hs-panel--mid .texto{ margin-left: var(--gutter); }
-}
-
-@media (prefers-reduced-motion: reduce){
-  .hs-outer::after{ animation: none; }
 }
 
 
@@ -2844,10 +2902,8 @@ body{
    ------------------------------------------------------------------------- */
 
 @media (max-width: 600px){
-  /* projetos era o único fora do compasso: 60px em cima e 100 embaixo, contra
-     os 56 de todo o resto. Num celular essa diferença aparece — a página
-     "respira" fundo em um lugar só */
-  .projetos{ padding-top: var(--respiro); padding-bottom: var(--respiro); }
+  /* o padding de .projetos NÃO entra aqui: ele é o que faz a seção cobrir a
+     tela de pausa do pin, e mexer nele desalinha o encavalamento */
   .portfolio-gallery{
     padding: 0 var(--gutter);
     min-height: 0;
@@ -2860,7 +2916,12 @@ body{
   .pj-tipo{ font-size: 12px; }
 
   .stack-section{ padding: var(--respiro) 0; }
-  .stack-item{ font-size: 11px; }
+  .stack-item{ font-size: 11px; gap: 14px; }
+
+  /* 48px de vão numa tela de 390 é meia dúzia de itens virando três. Cortando
+     pela metade eles ainda não se encostam — 24px continua sendo mais que o
+     dobro do vão interno do próprio item. */
+  .stack-marquee-track{ --vao: 24px; }
 
   /* 8px era pequeno demais pra ler de longe num celular */
   .idioma-nivel{ font-size: 10px; padding: 5px 11px 4px; }

@@ -563,9 +563,26 @@
       setTimeout(() => fig.classList.add('retrato-visivel'), 2200);
     }
 
+    /* QUANDO DISPARAR — e por que não é "assim que encosta na tela".
+
+       Na primeira versão eu soltava com o topo da foto a 88% da altura da
+       tela e 25% dela visível. Só que 25% visível é a foto ESPIANDO pela
+       borda de baixo: a revelação de 1,15s corria enquanto ela ainda estava
+       quase toda fora, e quando a pessoa terminava de rolar já tinha
+       acabado. O efeito acontecia, mas ninguém via.
+
+       Agora ela precisa estar de fato na tela: mais da metade visível e o
+       topo acima de 70% da altura. Como a foto é alta, isso quer dizer que a
+       revelação começa com ela mais ou menos enquadrada, e o percurso todo
+       acontece à vista. */
+    const PARTE_VISIVEL = 0.55;
+
     function noCampoDeVisao(){
       const r = fig.getBoundingClientRect();
-      return r.bottom > 0 && r.top < window.innerHeight * 0.88;
+      const h = window.innerHeight || 1;
+      if (r.height <= 0) return false;
+      const visivel = Math.min(r.bottom, h) - Math.max(r.top, 0);
+      return visivel / r.height >= PARTE_VISIVEL && r.top < h * 0.7;
     }
 
     if ('IntersectionObserver' in window) {
@@ -575,7 +592,12 @@
           io.disconnect();
           revelar();
         }
-      }, { threshold: 0.25 });
+      }, {
+        threshold: PARTE_VISIVEL,
+        /* encolhe a "tela" do observer por baixo: assim ele não conta como
+           visível a faixa que ainda está no rodapé do campo de visão */
+        rootMargin: '0px 0px -14% 0px'
+      });
       io.observe(fig);
     }
 
@@ -587,8 +609,16 @@
       requestAnimationFrame(() => { agendado = false; if (noCampoDeVisao()) revelar(); });
     }, { passive: true });
     window.addEventListener('resize', () => { if (noCampoDeVisao()) revelar(); });
+    // caso a seção já esteja na tela no carregamento (página curta, link direto)
     setTimeout(() => { if (noCampoDeVisao()) revelar(); }, 1200);
-    setTimeout(revelar, 6000);
+
+    /* Último recurso, e ele é LONGO de propósito. Antes eram 6 segundos, e
+       isso brigava com o efeito: seis segundos não dão nem pra chegar na
+       seção de contato, então a foto se revelava sozinha lá embaixo e a
+       pessoa encontrava tudo já pronto. Trinta segundos sem ninguém chegar
+       lá significa que a revelação não vai ser vista de qualquer forma —
+       aí o que importa é só a foto não ficar escondida para sempre. */
+    setTimeout(revelar, 30000);
   })();
 
 
