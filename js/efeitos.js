@@ -666,19 +666,59 @@
      ===================================================================== */
 
   (function initPausarForaDaTela(){
-    if (!('IntersectionObserver' in window)) return;
-
-    const secoes = document.querySelectorAll('.stack-marquee, .idioma');
+    const secoes = Array.from(document.querySelectorAll('.stack-marquee, .idioma'));
     if (!secoes.length) return;
 
-    const io = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        entry.target.classList.toggle('fora-da-tela', !entry.isIntersecting);
-      }
-    }, { rootMargin: '150px 0px' });   // retoma um pouco antes de aparecer,
-                                       // pra nunca "nascer" parado na tela
+    const MARGEM = 150;   // retoma um pouco antes de aparecer, pra nunca
+                          // "nascer" parado na tela
 
-    secoes.forEach((s) => io.observe(s));
+    /* PAUSADO É O ESTADO INICIAL, e essa inversão é o conserto.
+
+       Antes o módulo confiava no IntersectionObserver para descobrir o que
+       estava fora da tela. Só que a classe nascia AUSENTE, ou seja: tudo
+       começava rodando, e só parava quando o observer resolvesse avisar. Medi
+       o resultado com a página no topo — 68 animações das bandeiras e 8 dos
+       marquees girando a mais de 3.700px abaixo da dobra, desde o primeiro
+       quadro. Justamente o trabalho que este módulo existe pra evitar.
+
+       Marcando tudo como fora da tela antes de qualquer coisa, o padrão passa
+       a ser o barato: só volta a rodar o que for visto de fato. Pausar
+       animação não esconde conteúdo nenhum, então não há risco em errar para
+       o lado de pausar demais. */
+    secoes.forEach((s) => s.classList.add('fora-da-tela'));
+
+    // conta pela geometria, sem depender do observer
+    function conferir(){
+      const h = window.innerHeight || 1;
+      for (const s of secoes) {
+        const r = s.getBoundingClientRect();
+        const perto = r.bottom > -MARGEM && r.top < h + MARGEM;
+        s.classList.toggle('fora-da-tela', !perto);
+      }
+    }
+
+    let agendado = false;
+    window.addEventListener('scroll', () => {
+      if (agendado) return;
+      agendado = true;
+      requestAnimationFrame(() => { agendado = false; conferir(); });
+    }, { passive: true });
+
+    window.addEventListener('resize', conferir);
+    conferir();
+
+    /* O observer continua, mas agora como atalho e não como fonte da verdade:
+       ele avisa na hora certa sem custo de scroll. Se não existir no
+       navegador, a conferência por geometria acima já dá conta. */
+    if ('IntersectionObserver' in window) {
+      const io = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          entry.target.classList.toggle('fora-da-tela', !entry.isIntersecting);
+        }
+      }, { rootMargin: MARGEM + 'px 0px' });
+
+      secoes.forEach((s) => io.observe(s));
+    }
   })();
 
 })();

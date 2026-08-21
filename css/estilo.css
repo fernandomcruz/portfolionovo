@@ -1262,6 +1262,12 @@ body{
 
   transform-origin: center left;
   backface-visibility: hidden;
+}
+
+/* Mesma ideia: 68 camadas de GPU, uma por fatia, ficavam reservadas desde o
+   carregamento por causa de duas bandeiras que só aparecem lá pela metade da
+   página. A camada agora nasce junto com a animação e some com ela. */
+.idioma:not(.fora-da-tela) .fio{
   will-change: transform;
 }
 
@@ -2143,9 +2149,17 @@ body{
 .text-reveal .tr-char{
   display: inline-block;
   position: relative;
-  will-change: transform;
   transition: transform var(--tr-duration) var(--tr-easing);
   transition-delay: calc(var(--tr-i) * var(--tr-stagger));
+}
+
+/* `will-change` reserva camada de GPU NA HORA e não devolve enquanto a regra
+   valer. Solto no .tr-char, ele mantinha 31 camadas de pé o tempo todo por
+   causa de um menu que está fechado — memória de vídeo parada, do primeiro ao
+   último pixel da página. Só faz sentido enquanto o menu está aberto, que é
+   quando esses caracteres podem de fato se mover. */
+.menu-panel.open .text-reveal .tr-char{
+  will-change: transform;
 }
 
 /* direção "up" (padrão): cópia-fantasma aparece embaixo */
@@ -2891,8 +2905,22 @@ body{
    nativa: agora os painéis andam com o scroll da página, como no desktop, e
    não há arrasto lateral nenhum pra avisar. */
 @media (max-width: 768px){
-  /* mexer no --corpo desce os três juntos, mantendo a proporção */
-  .texto{ margin-left: var(--gutter); --corpo: clamp(24px, 13vw, 30rem); }
+  /* Mexer no --corpo desce os três juntos, mantendo a proporção.
+
+     O 13vw daqui era conservador demais: media a palavra mais larga do
+     conjunto ("SH●W YOU.") em 281px numa faixa util de 367 — sobravam 86px
+     de tela sem uso. Agora o teto é a MEDIDA QUE CABE, não um chute:
+
+       (largura da tela - a margem da esquerda - 10px de respiro) / 5.55
+
+     onde 5,55 é quantas vezes essa palavra é mais larga que o corpo da fonte.
+     O `min` com 16vw é o mesmo valor do desktop, e serve para dois fins: não
+     passar da escala de lá, e não dar um pulo de tamanho ao cruzar o
+     breakpoint. Numa tela de 390 sai 62px no lugar de 50,7. */
+  .texto{
+    margin-left: var(--gutter);
+    --corpo: min(16vw, calc((100vw - var(--gutter) - 10px) / 5.55));
+  }
   .hs-panel--mid .texto{ margin-left: var(--gutter); }
 }
 

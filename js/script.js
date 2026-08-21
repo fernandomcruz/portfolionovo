@@ -71,7 +71,57 @@ function travarScroll(travar){
    disso o parallax fica quieto. */
 let menuProntoTimer = 0;
 
+/* AS FOTOS DO MENU SÓ CARREGAM QUANDO FOREM PRECISAS.
+
+   São oito, e somavam cerca de 780KB baixados no primeiro acesso — para um
+   overlay que começa fechado e que muita gente nem abre. Elas competiam por
+   banda com o que estava na tela, e num celular em rede ruim isso é o
+   suficiente para o começo da página parecer travado.
+
+   `loading="lazy"` NÃO resolve isto, e vale registrar por quê: o overlay é
+   `position: fixed` empurrado para fora por um transform, e o navegador não
+   leva transforms em conta ao decidir o que está longe da tela. Para ele as
+   oito fotos estão bem ali na viewport — medi, e as oito continuavam baixando
+   no primeiro acesso mesmo marcadas como lazy.
+
+   O jeito que funciona é a URL não estar no `src`: ela mora em `data-src` e
+   só vira `src` na hora certa. E essa hora é o primeiro sinal de intenção — o
+   dedo encostando no botão, o mouse chegando perto —, que acontece antes do
+   clique, então quem abre o menu encontra tudo pronto. Como garantia, elas
+   também são carregadas sozinhas um pouco depois do `load`, quando o caminho
+   crítico já acabou e ninguém mais está esperando por banda.
+
+   Sem JS o menu nem abre (o botão é script), então não há caso em que essas
+   fotos precisem existir e este código não tenha rodado. */
+let fotosAquecidas = false;
+
+function aquecerFotosDoMenu(){
+  if (fotosAquecidas) return;
+  fotosAquecidas = true;
+  /* consulta o DOM aqui em vez de usar a lista lá de baixo: aquela é um
+     `const` declarado depois desta função, e depender da ordem de execução
+     pra não cair na zona morta é o tipo de armadilha que só aparece quando
+     alguém move uma linha */
+  document.querySelectorAll('.menu-photos img[data-src]').forEach((img) => {
+    img.src = img.dataset.src;
+    img.removeAttribute('data-src');
+  });
+}
+
+if (menuToggle) {
+  for (const evento of ['pointerenter', 'pointerdown', 'touchstart', 'focus']) {
+    menuToggle.addEventListener(evento, aquecerFotosDoMenu, { once: true, passive: true });
+  }
+}
+
+// depois que a página terminou de carregar, sem pressa: se ninguém encostou no
+// menu até aqui, as fotos entram na fila sem disputar nada
+window.addEventListener('load', () => {
+  setTimeout(aquecerFotosDoMenu, 2500);
+}, { once: true });
+
 function openMenu(){
+  aquecerFotosDoMenu();   // rede de segurança: abriu, carrega de qualquer jeito
   menuToggle.classList.add('open');
   menuPanel.classList.add('open');
   menuToggle.setAttribute('aria-expanded', 'true');
