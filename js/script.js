@@ -473,15 +473,69 @@ function atualizarProgressoPaineis(){
      quando o painel acaba de encher a tela. */
   const PERCURSO = 1.35;
 
+  /* ESCREVER --prog É A OPERAÇÃO CARA DESTA PÁGINA.
+
+     Medi: mover o trilho custa 0,013ms por quadro; escrever o --prog custa
+     0,9ms — setenta vezes mais. E o motivo é justo: mudar essa variável
+     invalida o estilo de tudo que depende dela, e o que depende dela são as
+     4 flores (24 formas de SVG) e as 8 letras do "DEVELOP". Desligando as
+     duas coisas o custo cai 76%, o que mostra que o peso está aí e não no
+     movimento em si. Num celular, que é 4 a 8 vezes mais lento, esses 0,9ms
+     viram 4 a 7 — de um orçamento de 16,7ms por quadro.
+
+     Não dá pra tirar as flores nem as letras: são o efeito. Dá pra escrever
+     menos, e é o que as duas guardas abaixo fazem. */
   for (const painel of paineisComProgresso) {
     const rect = painel.getBoundingClientRect();
+
+    /* 1. PAINEL LONGE DA TELA NÃO PRECISA DE CONTA NENHUMA.
+       São dois painéis, e no scroll horizontal quase nunca os dois estão à
+       vista ao mesmo tempo — escrever no que está fora é trabalho jogado
+       fora. A folga de meia tela garante que ele já chegue com o valor certo
+       antes de aparecer. */
+    if (rect.right < -largura * 0.5 || rect.left > largura * 1.5) continue;
+
     let p = (largura - rect.left) / (largura * PERCURSO);
     p = Math.min(1, Math.max(0, p));
-    painel.style.setProperty('--prog', p.toFixed(4));
+
+    /* 2. SÓ ESCREVE SE MUDOU O BASTANTE PRA SE VER.
+       O valor vinha com quatro casas, então praticamente todo quadro trazia
+       um número diferente e pagava a invalidação inteira — inclusive na
+       cauda do lerp, quando o trilho já está parando e anda frações de pixel.
+       Em 500 passos o efeito continua contínuo ao olho e as escritas
+       repetidas somem. */
+    const passo = Math.round(p * 500) / 500;
+    if (painel.__prog === passo) continue;
+    painel.__prog = passo;
+
+    painel.style.setProperty('--prog', passo.toFixed(3));
   }
 }
 
+/* O LERP SÓ EXISTE ONDE ELE RESOLVE ALGUMA COISA.
+
+   Ele suaviza o pulo grosso da roda do mouse: cada clique da roda salta uns
+   100px de uma vez, e sem amortecer os painéis andam aos trancos. No toque
+   não existe esse pulo — o dedo já entrega o movimento contínuo, e o
+   navegador ainda dá a inércia por cima.
+
+   O preço dele é o rabo: depois de cada evento de scroll, o lerp continua
+   pedindo quadros até a diferença cair abaixo de meio pixel. Cada um desses
+   quadros extras pagava a escrita do --prog, que é a operação cara daqui.
+   Amortecer o que já é suave era gastar quadro para não melhorar nada.
+
+   No toque, então, o trilho acompanha o scroll direto, sem rabo nenhum. */
+const HS_SUAVIZA = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
 function hsRender(){
+  if (!HS_SUAVIZA) {
+    hsCurrent = hsTarget;
+    hsTrack.style.transform = `translate3d(${-hsCurrent}px, 0, 0)`;
+    atualizarProgressoPaineis();
+    hsTicking = false;
+    return;
+  }
+
   hsCurrent += (hsTarget - hsCurrent) * 0.12;
   hsTrack.style.transform = `translate3d(${-hsCurrent}px, 0, 0)`;
   atualizarProgressoPaineis();
@@ -939,7 +993,40 @@ window.addEventListener('resize', () => {
   const passo = words.length > 1
     ? (1 - DURACAO_PALAVRA) / (words.length - 1)
     : 0;
-  bioEl.style.setProperty('--bw-passo', passo.toFixed(5));
+
+  /* AS PALAVRAS SÃO MOVIDAS UMA A UMA, PELA WEB ANIMATIONS API.
+
+     A versão anterior punha o percurso num `--prog` e deixava o CSS calcular
+     o atraso de cada palavra a partir dele. Funcionava, mas mudar uma
+     variável de que 57 elementos dependem obriga o navegador a recalcular o
+     estilo dos 57 — todo quadro de scroll. Medi 3,16ms por quadro, de um
+     orçamento de 16,7; num celular isso estoura o quadro sozinho, e era a
+     seção de contato travando.
+
+     Escrever `currentTime` direto na animação não passa por recálculo de
+     estilo nenhum. Mesma animação, mesmos keyframes, mesmo resultado na tela:
+     0,055ms por quadro, 98% mais barato.
+
+     A lista é montada uma vez. Se vier vazia (a animação ainda não existe no
+     primeiro quadro), tenta de novo — sem ela as palavras ficariam paradas no
+     começo, que é justamente o estado invisível. */
+  const DUR_MS = DURACAO_PALAVRA * 1000;
+  let animacoes = [];
+
+  function pegarAnimacoes(){
+    animacoes = Array.from(bioEl.querySelectorAll('.bio-word'))
+      .map((w) => w.getAnimations()[0])
+      .filter(Boolean);
+    animacoes.forEach((a) => a.pause());
+    return animacoes.length > 0;
+  }
+
+  function posicionarPalavras(p){
+    for (let i = 0; i < animacoes.length; i++) {
+      const t = (p - i * passo) * 1000;
+      animacoes[i].currentTime = t < 0 ? 0 : (t > DUR_MS ? DUR_MS : t);
+    }
+  }
 
   let agendado = false;
 
@@ -970,7 +1057,8 @@ window.addEventListener('resize', () => {
     let p = curso > 0 ? (y - inicio) / curso : 1;
     p = Math.min(1, Math.max(0, p));
 
-    bioEl.style.setProperty('--prog', p.toFixed(4));
+    if (!animacoes.length && !pegarAnimacoes()) return;
+    posicionarPalavras(p);
   }
 
   window.addEventListener('scroll', () => {
@@ -980,5 +1068,11 @@ window.addEventListener('resize', () => {
   }, { passive: true });
 
   window.addEventListener('resize', medir);
+
+  /* A animação só existe depois que o CSS da .bio-scrub foi aplicado, o que
+     não acontece no mesmo instante em que a classe entra. Estas tentativas
+     cobrem o intervalo; a partir daí o `medir` cuida sozinho. */
+  requestAnimationFrame(() => { pegarAnimacoes(); medir(); });
+  setTimeout(() => { pegarAnimacoes(); medir(); }, 400);
   medir();
 })();

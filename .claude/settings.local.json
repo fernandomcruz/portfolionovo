@@ -16,7 +16,9 @@
       "Bash(python -c \"import PIL; print\\('Pillow', PIL.__version__\\)\")",
       "Bash(git check-ignore *)",
       "Bash(cd \"C:/Users/Usuário/Desktop/portifolionovo\" *)",
-      "Bash(awk '{print \"capa:\", $5/1024 \"KB\"}')"
+      "Bash(awk '{print \"capa:\", $5/1024 \"KB\"}')",
+      "Bash(sed -n '/^function atualizarProgressoPaineis/,/^}/p' js/script.js)",
+      "Bash(sed -n '/^function hsRender/,/^}/p' js/script.js)"
     ]
   }
 }

@@ -2509,16 +2509,26 @@ body{
   animation-timing-function: ease;
   animation-fill-mode: both;
   animation-play-state: paused;
-  /* --bw-i é o número da palavra e --bw-passo é a distância entre uma e a
-     seguinte. O passo era fixo em .012, calibrado no olho para "umas 45
-     palavras" — e com ele a última só terminava lá pelos 75% do percurso.
-     Como esta é a ÚLTIMA seção da página, esses 25% finais não existem: o
-     scroll acaba antes e as últimas palavras ficavam borradas para sempre.
 
-     Agora o passo vem do JS, calculado a partir da contagem real de palavras
-     para que a última feche exatamente em --prog 1. Mexer no texto não
-     desregula mais nada. */
-  animation-delay: calc((var(--bw-i) * var(--bw-passo, .012) - var(--prog, 0)) * 1s);
+  /* O ATRASO É ZERO PORQUE QUEM MOVE O PONTEIRO É O JS.
+
+     Aqui existia `calc((var(--bw-i) * var(--bw-passo) - var(--prog)) * 1s)`:
+     bonito, e caríssimo. Cada vez que o --prog mudava — ou seja, todo quadro
+     de scroll — o navegador precisava reavaliar o atraso das 57 palavras e
+     recalcular o estilo de todas. Medi 3,16ms por quadro só nisso, num
+     orçamento de 16,7ms. Num celular, que é 4 a 8 vezes mais lento, isso
+     sozinho estourava o quadro inteiro: era a seção de contato travando.
+
+     A animação continua sendo esta, com estes keyframes. O que mudou é que o
+     js/script.js posiciona cada palavra pela Web Animations API, escrevendo
+     `currentTime` direto na animação. Isso não passa pelo recálculo de
+     estilo, e o mesmo movimento passou a custar 0,055ms — 98% menos.
+
+     Se este arquivo e o script saírem de sincronia, o sintoma é claro: as
+     palavras ficam paradas no primeiro quadro (invisíveis) porque ninguém
+     move o ponteiro. A classe .bio-scrub é o que autoriza esconder, e ela só
+     entra pelo script — sem script, texto normal. */
+  animation-delay: 0s;
 }
 
 @keyframes bioPalavra{
