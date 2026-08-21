@@ -1,0 +1,419 @@
+/* =========================================================================
+   EFEITOS AVANÇADOS
+   Camada extra em cima do estilo.css. Fica em arquivo separado de propósito:
+   se algum efeito daqui incomodar, é só comentar a linha do <link> no
+   index.html que o site volta exatamente ao que era, sem quebrar nada.
+
+   Índice:
+     1. Preloader (contador + cortina)
+     2. Barra de progresso do scroll
+     3. Cursor do mouse (nativo, recolorido)
+     4. Block reveal
+     5. Stack — reação ao hover
+     6. Menu — entrada escalonada
+     7. Botões magnéticos
+     8. Pausa de animações fora da tela
+     9. Respeito a prefers-reduced-motion
+   ========================================================================= */
+
+
+/* =========================================================================
+   1. PRELOADER
+   ========================================================================= */
+
+.preloader{
+  position: fixed;
+  inset: 0;
+  z-index: 500;                 /* acima de tudo, inclusive do menu (200) */
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  will-change: transform;
+  transition: transform .8s cubic-bezier(.76, 0, .24, 1);
+}
+
+/* a cortina sobe e leva a página junto: o conteúdo já está pronto embaixo */
+.preloader.pl-done{
+  transform: translateY(-100%);
+  pointer-events: none;
+}
+
+.pl-inner{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  transition: opacity .45s ease, transform .45s ease;
+}
+
+.preloader.pl-done .pl-inner{
+  opacity: 0;
+  transform: translateY(-24px);
+}
+
+.pl-label{
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .38em;
+  text-indent: .38em;            /* compensa o letter-spacing sobrando à direita */
+  color: var(--white);
+  opacity: .55;
+}
+
+.pl-counter{
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: clamp(64px, 14vw, 190px);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--lightgreen);
+  font-variant-numeric: tabular-nums; /* trava a largura dos dígitos: sem isso
+                                         o número treme a cada troca de valor */
+}
+
+.pl-bar{
+  width: min(260px, 50vw);
+  height: 2px;
+  background: rgba(241, 236, 225, 0.18);
+  overflow: hidden;
+}
+
+.pl-bar-fill{
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--lightgreen);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+/* enquanto o preloader está na tela a página não rola */
+body.is-loading{
+  overflow: hidden;
+}
+
+
+/* =========================================================================
+   2. BARRA DE PROGRESSO DO SCROLL
+   ========================================================================= */
+
+.scroll-progress{
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  z-index: 300;
+  pointer-events: none;
+  background: transparent;
+}
+
+.scroll-progress span{
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--lightgreen);
+  transform: scaleX(0);
+  transform-origin: left center;
+  will-change: transform;
+}
+
+
+/* =========================================================================
+   3. CURSOR DO MOUSE — nativo, só recolorido
+   Nada de elemento seguindo o mouse por JS: é o cursor do sistema mesmo,
+   trocado por uma imagem SVG. Custo zero de runtime (o navegador desenha o
+   cursor fora da árvore de renderização da página) e nenhum atraso.
+   O SVG é um círculo cheio de lightgreen, sem stroke nenhum. Os dois números
+   depois da url() são o "hotspot": o ponto do desenho que de fato clica —
+   como é um círculo de 20x20, o alvo é o centro exato, 10 10.
+   ========================================================================= */
+
+:root{
+  --cursor-bola: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><circle cx="10" cy="10" r="7" fill="%23d9ff00"/></svg>') 10 10;
+  --cursor-bola-g: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30"><circle cx="15" cy="15" r="11" fill="%23d9ff00"/></svg>') 15 15;
+}
+
+body{
+  cursor: var(--cursor-bola), auto;
+}
+
+/* Em cima de qualquer coisa clicável a bolinha cresce um pouco — é o único
+   "efeito" que sobrou, e ele é gratuito: só troca a imagem do cursor.
+   Os seletores de CLASSE aqui não são redundância: o estilo.css já declara
+   `cursor: pointer` em .cv-button, .button-icon, .menu-toggle,
+   .text-reveal e .word span. Como especificidade de classe
+   ganha de seletor de tipo, um `a { ... }` sozinho perderia pra todos eles —
+   por isso cada um precisa ser nomeado. */
+a, button, [role="button"], input, textarea, select, summary,
+.pj-link, .stack-item,
+.cv-button, .button-icon, .menu-toggle, .text-reveal, .ms-icon, .word span{
+  cursor: var(--cursor-bola-g), pointer;
+}
+
+
+/* =========================================================================
+   4. BLOCK REVEAL
+   Uma barra sólida varre o texto: cresce da esquerda até cobrir tudo, e
+   então encolhe pela direita — e o texto já está lá quando ela passa. É o
+   mesmo princípio de uma cortina, só que horizontal e rápida.
+
+   Sobre esconder o texto: ele é escondido logo no carregamento, senão dava
+   pra LER a frase e só depois ver ela piscar pra sumir antes da barra chegar.
+   Como isso é justamente o padrão que já deixou títulos invisíveis aqui
+   antes, a leitura é garantida por DOIS caminhos independentes:
+     · o JS confere a geometria (scroll/resize/timeout), então não depende do
+       IntersectionObserver disparar;
+     · a classe .br-visivel entra por setTimeout, então não depende nem da
+       animação rodar.
+   ========================================================================= */
+
+.br-wrap{
+  position: relative;
+  display: inline-block;
+  vertical-align: bottom;
+  /* sem isto a barra, que é um filho absoluto, vazaria pra fora do texto */
+  overflow: hidden;
+}
+
+.br-wrap::after{
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--lightgreen);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+/* O texto é escondido logo no carregamento, antes da primeira pintura —
+   assim ele nunca é lido ANTES de a barra passar. Quem devolve a visibilidade
+   é a animação (ou o cinto de segurança abaixo). */
+.br-pronto .br-txt{
+  opacity: 0;
+}
+
+/* Caminho de leitura independente da animação, acionado por setTimeout no
+   js/efeitos.js. Precisa vir DEPOIS da regra acima: as duas têm a mesma
+   especificidade, então quem vence é a última. Quando a animação roda
+   normalmente ela já deixou o texto em 1 e esta regra não altera nada. */
+.br-visivel .br-txt{
+  opacity: 1;
+}
+
+.br-anima .br-txt{
+  animation: brTexto 0s linear forwards;
+  /* aparece na virada da barra, quando ela cobre o texto por inteiro */
+  animation-delay: .34s;
+}
+
+.br-anima .br-wrap::after{
+  animation: brBarra .78s cubic-bezier(.77, 0, .18, 1) forwards;
+}
+
+@keyframes brBarra{
+  0%    { transform: scaleX(0); transform-origin: left center; }
+  /* na metade a barra está cheia; a troca de origem é o que faz ela sair
+     pelo outro lado em vez de voltar por onde veio */
+  44%   { transform: scaleX(1); transform-origin: left center; }
+  44.1% { transform: scaleX(1); transform-origin: right center; }
+  100%  { transform: scaleX(0); transform-origin: right center; }
+}
+
+@keyframes brTexto{
+  to{ opacity: 1; }
+}
+
+/* O rótulo do hero é curto e pequeno (172 x 17px, fonte de 13px). Na mesma
+   velocidade dos títulos de 96px a barra atravessa esse pedacinho num piscar
+   e ninguém registra o efeito. Aqui ela anda mais devagar, e espera um
+   instante depois da cortina do preloader sair — tempo do olho chegar antes
+   de a coisa acontecer. */
+.nome.br-anima .br-wrap::after{
+  animation-duration: 1.05s;
+  animation-delay: .25s;
+}
+
+/* o texto aparece quando a barra cobre tudo: 44% de 1.05s, mais o atraso */
+.nome.br-anima .br-txt{
+  animation-delay: .71s;
+}
+
+/* a barra some e o texto fica: nada de movimento pra quem não quer */
+@media (prefers-reduced-motion: reduce){
+  .br-pronto .br-txt{ opacity: 1; }
+  .br-wrap::after{ display: none; }
+}
+
+
+/* =========================================================================
+   5. STACK — REAÇÃO AO HOVER
+   ========================================================================= */
+
+.stack-item{
+  transition: transform .3s cubic-bezier(.22, 1, .36, 1), color .3s ease;
+}
+
+.stack-item:hover{
+  transform: translateY(-6px);
+  color: #6f7d00;
+}
+
+.stack-item i{ transition: transform .3s cubic-bezier(.34, 1.56, .64, 1), color .3s ease; }
+.stack-item:hover i{ transform: scale(1.22) rotate(-6deg); color: #6f7d00; }
+
+
+/* =========================================================================
+   6. MENU — ENTRADA ESCALONADA
+   As fotos entram de baixo com um recorte, e os links caem um atrás do
+   outro. O atraso base espera o painel terminar de descer (.55s).
+   ========================================================================= */
+
+.menu-photos img{
+  opacity: 0;
+  transform: translateY(60px) rotate(var(--rot, 0deg));
+  transition:
+    opacity   .7s cubic-bezier(.22, 1, .36, 1),
+    transform .7s cubic-bezier(.22, 1, .36, 1),
+    filter    .4s ease;
+}
+
+.menu-panel.open .menu-photos img{
+  opacity: 1;
+  transform: translateY(0) rotate(var(--rot, 0deg));
+}
+
+.menu-photo-col img:nth-child(1){ transition-delay: .40s, .40s, 0s; }
+.menu-photo-col img:nth-child(2){ transition-delay: .48s, .48s, 0s; }
+.menu-photo-col img:nth-child(3){ transition-delay: .56s, .56s, 0s; }
+.menu-photo-col img:nth-child(4){ transition-delay: .64s, .64s, 0s; }
+.menu-photo-col.offset img:nth-child(1){ transition-delay: .44s, .44s, 0s; }
+.menu-photo-col.offset img:nth-child(2){ transition-delay: .52s, .52s, 0s; }
+.menu-photo-col.offset img:nth-child(3){ transition-delay: .60s, .60s, 0s; }
+.menu-photo-col.offset img:nth-child(4){ transition-delay: .68s, .68s, 0s; }
+
+/* ASSIM QUE A ENTRADA TERMINA, a transição de transform PRECISA sair daqui.
+   O parallax escreve em `transform` a cada quadro; se a transição de .7s
+   (com delay de até .68s) continuar valendo, cada movimento do mouse vira um
+   comando que só começa meio segundo depois e ainda leva 0.7s pra chegar. O
+   efeito não some — ele fica tão mole e atrasado que parece desligado, e foi
+   exatamente isso que aconteceu quando adicionei a entrada escalonada.
+   A suavização do parallax é feita por interpolação no js/script.js, então
+   aqui a transição não faz falta nenhuma. */
+.menu-panel.menu-pronto .menu-photos img{
+  transition: filter .4s ease;
+  transition-delay: 0s;
+}
+
+/* o parallax do mouse (script.js) escreve transform inline nas fotos e
+   sobrescreveria a animação de entrada — por isso ele só é ligado depois
+   que a entrada termina, via classe no painel */
+.menu-panel .menu-links li{
+  opacity: 0;
+  transform: translateY(40px);
+  transition:
+    opacity   .6s cubic-bezier(.22, 1, .36, 1),
+    transform .6s cubic-bezier(.22, 1, .36, 1);
+}
+
+.menu-panel.open .menu-links li{
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.menu-panel .menu-links li:nth-child(1){ transition-delay: .42s; }
+.menu-panel .menu-links li:nth-child(2){ transition-delay: .50s; }
+.menu-panel .menu-links li:nth-child(3){ transition-delay: .58s; }
+.menu-panel .menu-links li:nth-child(4){ transition-delay: .66s; }
+.menu-panel .menu-links li:nth-child(5){ transition-delay: .74s; }
+
+.menu-panel .menu-divider{
+  transform: scaleX(0);
+  transform-origin: right center;
+  transition: transform .8s cubic-bezier(.22, 1, .36, 1) .78s;
+}
+
+.menu-panel.open .menu-divider{ transform: scaleX(1); }
+
+.menu-panel .ms-icon{
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity   .5s ease,
+    transform .5s cubic-bezier(.34, 1.56, .64, 1),
+    background-color .3s,
+    border-radius .3s;
+}
+
+.menu-panel.open .ms-icon{ opacity: 1; transform: translateY(0); }
+.menu-panel.open .ms-icon:nth-child(1){ transition-delay: .86s; }
+.menu-panel.open .ms-icon:nth-child(2){ transition-delay: .92s; }
+.menu-panel.open .ms-icon:nth-child(3){ transition-delay: .98s; }
+.menu-panel.open .ms-icon:nth-child(4){ transition-delay: 1.04s; }
+
+/* o :hover do ms-icon precisa continuar valendo depois da entrada */
+.menu-panel.open .ms-icon:hover{
+  transform: scale(1.4);
+  transition-delay: 0s;
+}
+
+
+/* =========================================================================
+   7. BOTÕES MAGNÉTICOS
+   O deslocamento vem do JS pela propriedade `translate`, NÃO por `transform`.
+   Isso é de propósito: esses botões já usam transform pros próprios efeitos
+   (o scale(1.4) do .ms-icon, o cubo girando do .button-icon). Escrevendo em
+   `translate` — que é uma propriedade independente e se compõe com transform
+   — o magnetismo entra por cima sem apagar nada do que já existia.
+   ========================================================================= */
+
+/* NENHUMA `transition` aqui — de propósito, e isso é importante.
+   `transition` é propriedade-atalho: declarar ela SUBSTITUI a lista inteira
+   do elemento, não acrescenta. Como .ms-icon e .button-icon têm as próprias
+   transições de hover (background-color, transform, border-radius,
+   border-color), qualquer `transition` declarada aqui as apagava — e a
+   classe .mag-vivo, que zerava tudo com `transition: none`, fazia o hover
+   pular direto pro estado final, sem animação nenhuma.
+   A volta suave do ímã agora é interpolada no js/efeitos.js, escrevendo
+   `translate` quadro a quadro. Assim o ímã não encosta na transition de
+   ninguém. */
+[data-magnetic]{
+  will-change: translate;
+}
+
+
+/* =========================================================================
+   8. PAUSA DE ANIMAÇÕES FORA DA TELA
+   Marquee é animação infinita: o navegador continua compondo quadro a quadro
+   mesmo com a seção a três telas de distância, porque não tem como saber que
+   aquilo não importa mais. A classe é posta/tirada por IntersectionObserver
+   no js/efeitos.js. Só o CSS aqui — pausar é uma linha.
+   ========================================================================= */
+
+.fora-da-tela .stack-marquee-track{
+  animation-play-state: paused;
+}
+
+
+/* =========================================================================
+   9. PREFERS-REDUCED-MOTION
+   Nada de cursor perseguindo, nada de parallax, nada de cortina.
+   ========================================================================= */
+
+@media (prefers-reduced-motion: reduce){
+  .preloader{ display: none; }
+
+  .menu-photos img,
+  .menu-panel .menu-links li,
+  .menu-panel .ms-icon{
+    opacity: 1;
+    transform: none;
+    transition-delay: 0s;
+  }
+
+  .menu-panel .menu-divider{ transform: scaleX(1); }
+
+}

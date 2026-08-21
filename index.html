@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fernando</title>
+
+  <!-- ===================== Fontes ===================== -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@100..800&family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Changa+One:ital@0;1&family=Exo+2:ital,wght@0,100..900;1,100..900&family=Fira+Sans+Extra+Condensed:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Galada&family=Merriweather+Sans:ital,wght@0,300..800;1,300..800&family=Nosifer&family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Passion+One:wght@400;700;900&family=Work+Sans:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+
+  <!-- ===================== Ícones (Stack) ===================== -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/devicons/devicon@2.15.1/devicon.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <!-- ===================== Estilo ===================== -->
+  <link rel="stylesheet" href="css/estilo.css">
+  <link rel="stylesheet" href="css/efeitos.css">
+  <link rel="icon" type="image/png" href="assets/icone.png">
+</head>
+<body>
+
+  <!-- ===================== Preloader (contador + cortina) ===================== -->
+  <div id="preloader" class="preloader">
+    <div class="pl-inner">
+      <span class="pl-label">FERNANDO MARQUES DA CRUZ</span>
+      <span class="pl-counter" id="plCounter">0</span>
+    </div>
+    <div class="pl-bar"><span class="pl-bar-fill" id="plBarFill"></span></div>
+  </div>
+
+  <!-- ===================== Barra de progresso do scroll ===================== -->
+  <div class="scroll-progress" aria-hidden="true"><span id="scrollProgressFill"></span></div>
+
+  <!-- ===================== Menu hambúrguer (botão fixo) ===================== -->
+  <button id="menu-toggle" class="menu-toggle" data-magnetic="12" aria-label="Abrir menu" aria-expanded="false">
+    <span class="mt-bar mt-bar-1"></span>
+    <span class="mt-bar mt-bar-2"></span>
+    <span class="mt-bar mt-bar-3"></span>
+  </button>
+
+  <!-- ===================== Menu overlay (fotos + links) ===================== -->
+  <nav id="menu-panel" class="menu-panel" aria-hidden="true">
+
+    <!-- linhas onduladas de fundo, puramente decorativas -->
+    <div class="menu-waves" aria-hidden="true">
+      <div class="menu-wave menu-wave--white menu-wave--right" style="--wave-fade-delay: 0.0s; --wave-bob-duration: 3.2s; --wave-bob-delay: 0.0s; --wave-scroll-duration: 16.0s;">
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+      </div>
+
+      <div class="menu-wave menu-wave--lightgreen menu-wave--right" style="--wave-fade-delay: 0.45s; --wave-bob-duration: 3.57s; --wave-bob-delay: 0.63s; --wave-scroll-duration: 17.7s;">
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+      </div>
+
+      <div class="menu-wave menu-wave--white menu-wave--right" style="--wave-fade-delay: 0.9s; --wave-bob-duration: 3.94s; --wave-bob-delay: 1.26s; --wave-scroll-duration: 19.4s;">
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+      </div>
+
+      <div class="menu-wave menu-wave--lightgreen menu-wave--right" style="--wave-fade-delay: 1.35s; --wave-bob-duration: 4.31s; --wave-bob-delay: 1.89s; --wave-scroll-duration: 21.1s;">
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+      </div>
+
+      <div class="menu-wave menu-wave--white menu-wave--right" style="--wave-fade-delay: 1.8s; --wave-bob-duration: 4.68s; --wave-bob-delay: 2.52s; --wave-scroll-duration: 22.8s;">
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+      </div>
+
+      <div class="menu-wave menu-wave--lightgreen menu-wave--right" style="--wave-fade-delay: 2.25s; --wave-bob-duration: 5.05s; --wave-bob-delay: 3.15s; --wave-scroll-duration: 24.5s;">
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+      </div>
+
+      <div class="menu-wave menu-wave--white menu-wave--right" style="--wave-fade-delay: 2.7s; --wave-bob-duration: 5.42s; --wave-bob-delay: 3.78s; --wave-scroll-duration: 26.2s;">
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+      </div>
+
+      <div class="menu-wave menu-wave--lightgreen menu-wave--right" style="--wave-fade-delay: 3.15s; --wave-bob-duration: 5.79s; --wave-bob-delay: 4.41s; --wave-scroll-duration: 27.9s;">
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+      </div>
+
+      <div class="menu-wave menu-wave--white menu-wave--right" style="--wave-fade-delay: 3.6s; --wave-bob-duration: 6.16s; --wave-bob-delay: 0.04s; --wave-scroll-duration: 29.6s;">
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+      </div>
+
+      <div class="menu-wave menu-wave--lightgreen menu-wave--right" style="--wave-fade-delay: 4.05s; --wave-bob-duration: 6.53s; --wave-bob-delay: 0.67s; --wave-scroll-duration: 31.3s;">
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+      </div>
+
+      <div class="menu-wave menu-wave--white menu-wave--right" style="--wave-fade-delay: 4.5s; --wave-bob-duration: 3.4s; --wave-bob-delay: 1.3s; --wave-scroll-duration: 17.0s;">
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+      </div>
+
+      <div class="menu-wave menu-wave--lightgreen menu-wave--right" style="--wave-fade-delay: 4.95s; --wave-bob-duration: 3.77s; --wave-bob-delay: 1.93s; --wave-scroll-duration: 18.7s;">
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+      </div>
+
+      <div class="menu-wave menu-wave--white menu-wave--right" style="--wave-fade-delay: 5.4s; --wave-bob-duration: 4.14s; --wave-bob-delay: 2.56s; --wave-scroll-duration: 20.4s;">
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+      </div>
+
+      <div class="menu-wave menu-wave--lightgreen menu-wave--right" style="--wave-fade-delay: 5.85s; --wave-bob-duration: 4.51s; --wave-bob-delay: 3.19s; --wave-scroll-duration: 22.1s;">
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+      </div>
+
+      <div class="menu-wave menu-wave--white menu-wave--right" style="--wave-fade-delay: 6.3s; --wave-bob-duration: 4.88s; --wave-bob-delay: 3.82s; --wave-scroll-duration: 23.8s;">
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+      </div>
+
+      <div class="menu-wave menu-wave--lightgreen menu-wave--right" style="--wave-fade-delay: 6.75s; --wave-bob-duration: 5.25s; --wave-bob-delay: 4.45s; --wave-scroll-duration: 25.5s;">
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+        <div class="menu-wave-track">
+          <svg class="menu-wave-svg" viewBox="0 0 400 32" preserveAspectRatio="none">
+            <path d="M0,16 C25,2 75,30 100,16 C125,2 175,30 200,16 C225,2 275,30 300,16 C325,2 375,30 400,16"></path>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="menu-content">
+
+      <div class="menu-photos" id="menu-photos">
+        <div class="menu-photo-col">
+          <img src="assets/euterno.jpeg" alt="" data-depth="34" style="--rot: -3deg;">
+          <img src="assets/eueminhavida.jpeg" alt="" data-depth="46" style="--rot: 2deg;">
+          <img src="assets/eudebaixo.jpeg" alt="" data-depth="58" style="--rot: -2deg;">
+          <img src="assets/eumaisnovo.jpeg" alt="" data-depth="70" style="--rot: 3deg;">
+        </div>
+        <div class="menu-photo-col offset">
+          <img src="assets/pc.jpeg" alt="" data-depth="40" style="--rot: 3deg;">
+          <img src="assets/eublusabranca.jpeg" alt="" data-depth="52" style="--rot: -3deg;">
+          <img src="assets/familia.jpeg" alt="" data-depth="64" style="--rot: 2deg;">
+          <img src="assets/eublusapreta.jpeg" alt="" data-depth="76" style="--rot: -2deg;">
+        </div>
+      </div>
+
+      <div class="menu-right">
+        <ul class="menu-links">
+          <li><a href="#inicio"   class="text-reveal" data-text-reveal data-text="Inicio"   data-direction="up" data-menu-link></a></li>
+          <li><a href="#sobre"    class="text-reveal" data-text-reveal data-text="Sobre"    data-direction="up" data-menu-link></a></li>
+          <li><a href="#stack"    class="text-reveal" data-text-reveal data-text="Stack"    data-direction="up" data-menu-link></a></li>
+          <li><a href="#projetos" class="text-reveal" data-text-reveal data-text="Projetos" data-direction="up" data-menu-link></a></li>
+          <li><a href="#contato"  class="text-reveal" data-text-reveal data-text="Contato"  data-direction="up" data-menu-link></a></li>
+        </ul>
+
+        <hr class="menu-divider">
+
+        <div class="menu-social-card">
+          <a data-magnetic="10" class="ms-icon ms-instagram" href="https://www.instagram.com/_ferd14_/" target="_blank" rel="noopener noreferrer" aria-label="Instagram">
+            <i class="fa-brands fa-instagram"></i>
+          </a>
+          <a data-magnetic="10" class="ms-icon ms-linkedin" href="https://www.linkedin.com/in/fernando-marques-da-cruz-105029346/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn">
+            <i class="fa-brands fa-linkedin-in"></i>
+          </a>
+          <a data-magnetic="10" class="ms-icon ms-github" href="https://github.com/fernandomcruz" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+            <i class="fa-brands fa-github"></i>
+          </a>
+          <a data-magnetic="10" class="ms-icon ms-email" href="mailto:fernandomarquecruz@gmail.com" aria-label="Email">
+            <i class="fa-solid fa-envelope"></i>
+          </a>
+        </div>
+      </div>
+
+    </div>
+  </nav>
+
+  <!-- ===================== Hero ===================== -->
+  <!-- Coluna: rótulo no topo -> assinatura animada (canvas) -> texto digitado -->
+  <hero class="hero" id="inicio">
+
+    <div class="fixed">
+
+      <h1 class="nome" data-block-reveal>I BRING IDEAS TO LIFE.</h1>
+
+      <!-- A assinatura é desenhada traço a traço em js/assinatura.js.
+           O canvas é transparente: o fundo escuro da página aparece por baixo. -->
+      <div class="assinatura-wrap">
+        <canvas id="assinatura" aria-label="Assinatura de Fernando"></canvas>
+      </div>
+
+      <div class="overlay">
+        <h1 class="typed-line">
+          <span class="typed-nome">Hi, I'm Fernando.</span>
+          I'm a <span class="auto-type"></span>
+        </h1>
+      </div>
+
+    </div>
+  </hero>
+
+  <!-- ===================== Transição em onda (Hero -> Sobre) ===================== -->
+  <div class="conteudo" id="sobre">
+    <div class="wave-cap" aria-hidden="true">
+      <svg id="waveCapSvg" preserveAspectRatio="none">
+        <path id="waveCapPath"></path>
+      </svg>
+    </div>
+
+    <div class="conteudo-inner">
+
+      <!-- ===================== Sobre (scroll horizontal pinado) ===================== -->
+      <section class="hs-outer" id="hsOuter">
+        <div class="hs-sticky">
+          <div class="hs-track" id="hsTrack">
+
+            <article class="hs-panel">
+              <div class="texto">
+                <h3 style="margin-left: 5px;">More</h3>
+                <h2>THAN A</h2>
+                <h1>DEVELOPER</h1>
+              </div>
+            </article>
+
+            <!-- "I DESIGN." — a palavra se desenha: cada letra nasce como
+                 contorno (o rascunho) e vai sendo preenchida, uma atrás da
+                 outra. É o próprio ato de projetar, aplicado à palavra.
+                 Se a animação não rodar, ficam as letras preenchidas. -->
+            <article class="hs-panel hs-panel--mid painel-design" data-progresso>
+            <!-- Flores de frente. Cada uma nasce PEQUENA e vai CRESCENDO com o
+                 scroll: o script.js escreve --prog (0 a 1) enquanto o painel
+                 atravessa a tela, e o CSS usa esse valor como agulha do
+                 crescimento. O --ini é o ponto do percurso em que cada flor
+                 aparece — sempre depois de já estar em cena. -->
+            <div class="jardim" aria-hidden="true">
+              <div class="flor flor--rosa" data-ancora="I,162,-46" style="--tam:290px; --ini:.10; --dur:.34s;">
+                <svg viewBox="-60 -60 120 120" aria-hidden="true">
+                  <g transform="rotate(0.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
+                  <g transform="rotate(72.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
+                  <g transform="rotate(144.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
+                  <g transform="rotate(216.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
+                  <g transform="rotate(288.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
+                  <circle class="miolo" cx="0" cy="0" r="15"/>
+                </svg>
+              </div>
+              <div class="flor flor--lilas" data-ancora="N-dir,0,-32" style="--tam:220px; --ini:.44; --dur:.34s;">
+                <svg viewBox="-60 -60 120 120" aria-hidden="true">
+                  <g transform="rotate(0.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
+                  <g transform="rotate(72.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
+                  <g transform="rotate(144.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
+                  <g transform="rotate(216.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
+                  <g transform="rotate(288.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
+                  <circle class="miolo" cx="0" cy="0" r="15"/>
+                </svg>
+              </div>
+              <div class="flor flor--amarela" data-ancora="S-esq,-26,80" style="--tam:250px; --ini:.20; --dur:.34s;">
+                <svg viewBox="-60 -60 120 120" aria-hidden="true">
+                  <g transform="rotate(0.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
+                  <g transform="rotate(72.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
+                  <g transform="rotate(144.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
+                  <g transform="rotate(216.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
+                  <g transform="rotate(288.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
+                  <circle class="miolo" cx="0" cy="0" r="15"/>
+                </svg>
+              </div>
+              <div class="flor flor--vermelha" data-ancora="N-esq,-26,80" style="--tam:225px; --ini:.38; --dur:.34s;">
+                <svg viewBox="-60 -60 120 120" aria-hidden="true">
+                  <g transform="rotate(0.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
+                  <g transform="rotate(72.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
+                  <g transform="rotate(144.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
+                  <g transform="rotate(216.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
+                  <g transform="rotate(288.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
+                  <circle class="miolo" cx="0" cy="0" r="15"/>
+                </svg>
+              </div>
+            </div>
+              <div class="texto">
+                <h2 style="transform: translateX(10px);">I</h2>
+                <h1 class="design-alvo" aria-label="DESIGN.">
+                    <span class="d-letra" style="--i: 0;">D</span>
+                    <span class="d-letra" style="--i: 1;">E</span>
+                    <span class="d-letra" style="--i: 2;">S</span>
+                    <span class="d-letra" style="--i: 3;">I</span>
+                    <span class="d-letra" style="--i: 4;">G</span>
+                    <span class="d-letra" style="--i: 5;">N</span>
+                    <span class="d-letra" style="--i: 6;">.</span>
+                </h1>
+              </div>
+            </article>
+
+            <!-- "I DEVELOP." — montagem: as letras chegam tombadas e giram
+                 até encaixar, uma a uma, como peça sendo assentada. A régua de
+                 build enche no mesmo compasso, terminando junto com a última
+                 letra. Nada mais em volta. -->
+            <article class="hs-panel hs-panel--mid painel-develop" data-progresso>
+
+              <div class="texto">
+                <h2 style="transform: translateX(10px);">I</h2>
+                <h1 class="dev-alvo" aria-label="DEVELOP.">
+                    <span class="dv-letra" style="--i:0;">D</span>
+                    <span class="dv-letra" style="--i:1;">E</span>
+                    <span class="dv-letra" style="--i:2;">V</span>
+                    <span class="dv-letra" style="--i:3;">E</span>
+                    <span class="dv-letra" style="--i:4;">L</span>
+                    <span class="dv-letra" style="--i:5;">O</span>
+                    <span class="dv-letra" style="--i:6;">P</span>
+                    <span class="dv-letra" style="--i:7;">.</span>
+                </h1>
+                <div class="build" aria-hidden="true">
+                  <span class="build-rotulo">building</span>
+                  <span class="build-barra"><i></i></span>
+                </div>
+              </div>
+            </article>
+
+            <article class="hs-panel hs-panel--mid">
+              <div class="texto">
+                <h2 style="transform: translateX(60px);">I</h2>
+                <h1>
+                  <div class="word">
+                    <span>A</span>
+                    <span>N</span>
+                    <span>I</span>
+                    <span>M</span>
+                    <span>A</span>
+                    <span>T</span>
+                    <span>E</span>
+                    <span>.</span>
+                  </div>
+                </h1>
+              </div>
+            </article>
+
+            <article class="hs-panel fixado">
+              <div class="texto">
+                <h3 style="transform: translateX(10px);">Now,</h3>
+                <h2>LET ME</h2>
+                <h1 class="show-word">SH<span class="eye-o" aria-hidden="true">
+                  <svg class="eye-svg" viewBox="0 0 100 100">
+                    <defs>
+                      <clipPath id="eyeClipShow">
+                        <circle cx="50" cy="50" r="48"></circle>
+                      </clipPath>
+                    </defs>
+                    <circle class="eye-ring" cx="50" cy="50" r="49"></circle>
+                    <g clip-path="url(#eyeClipShow)">
+                      <circle class="eye-white" cx="50" cy="50" r="36"></circle>
+                      <g class="eye-look">
+                        <circle class="eye-iris" cx="50" cy="50" r="17"></circle>
+                        <circle class="eye-pupil" cx="50" cy="50" r="8"></circle>
+                        <circle class="eye-glint" cx="43" cy="42" r="3"></circle>
+                      </g>
+                      <rect class="eye-lid eye-lid-top" x="0" y="0" width="100" height="50"></rect>
+                      <rect class="eye-lid eye-lid-bottom" x="0" y="50" width="100" height="50"></rect>
+                    </g>
+                    <g class="eye-brows">
+                      <path class="eye-brow" d="M30,14 Q24,4 20,-6"></path>
+                      <path class="eye-brow" d="M50,8 Q52,-2 50,-12"></path>
+                      <path class="eye-brow" d="M70,14 Q76,4 80,-6"></path>
+                    </g>
+                  </svg>
+                </span>W YOU.</h1>
+              </div>
+            </article>
+
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ===================== Projetos ===================== -->
+  <section>
+    <div class="projetos">
+
+      <section class="portfolio-gallery" id="projetos">
+        <div class="pg-header">
+          <h2 class="pg-title titulo-secao" data-block-reveal>MY PROJECTS</h2>
+        </div>
+
+        <!-- Índice de projetos: uma linha por trabalho. Ao passar o mouse a
+             linha se acende e a arte do projeto entra pela direita, dentro da
+             própria linha — a altura nunca muda, então nada na página se
+             desloca enquanto se percorre a lista. -->
+        <ol class="pj-lista">
+          <li class="pj-item">
+            <a class="pj-link" href="https://ldengenharia.netlify.app/" target="_blank" rel="noopener noreferrer">
+              <span class="pj-num">01</span>
+              <span class="pj-nome">L&amp;D Engenharia</span>
+              <span class="pj-tipo">Site institucional</span>
+              <span class="pj-seta" aria-hidden="true"></span>
+              <span class="pj-arte" aria-hidden="true">
+                <img src="assets/LDsite.png" alt="" loading="lazy" decoding="async">
+              </span>
+            </a>
+          </li>
+          <li class="pj-item">
+            <a class="pj-link" href="#">
+              <span class="pj-num">02</span>
+              <span class="pj-nome">PH Vest</span>
+              <span class="pj-tipo">Landing page</span>
+              <span class="pj-seta" aria-hidden="true"></span>
+              <span class="pj-arte" aria-hidden="true">
+                <img src="assets/portifoliosite.png" alt="" loading="lazy" decoding="async">
+              </span>
+            </a>
+          </li>
+          <li class="pj-item">
+            <a class="pj-link" href="#">
+              <span class="pj-num">03</span>
+              <span class="pj-nome">Portfólio Pessoal</span>
+              <span class="pj-tipo">Portfólio</span>
+              <span class="pj-seta" aria-hidden="true"></span>
+              <span class="pj-arte" aria-hidden="true">
+                <img src="assets/projetosite.png" alt="" loading="lazy" decoding="async">
+              </span>
+            </a>
+          </li>
+        </ol>
+      </section>
+
+    </div>
+  </section>
+
+  <!-- ===================== Stack ===================== -->
+  <section class="stack-section" id="stack">
+    <!-- Bandeiras nas laterais. O mastro é reto, sai da parede a 90°, e a
+         bandeira pende dele DEITADA: o pano inteiro leva um giro de 90°, de
+         modo que a base dela aponta para a lateral. Por isso as fatias aqui
+         voltam a ser verticais — é o giro do conjunto que as deixa
+         empilhadas na tela. São 14 fatias por bandeira. -->
+    <div class="stack-topo">
+      <div class="idioma idioma--esq">
+        <span class="mastro" aria-hidden="true"></span>
+        <span class="pano">
+          <span class="bandeira bandeira--br" role="img" aria-label="Bandeira do Brasil">
+            <i class="fio" style="--f:0; --amp:0.000;"></i>
+            <i class="fio" style="--f:1; --amp:0.030;"></i>
+            <i class="fio" style="--f:2; --amp:0.061;"></i>
+            <i class="fio" style="--f:3; --amp:0.091;"></i>
+            <i class="fio" style="--f:4; --amp:0.121;"></i>
+            <i class="fio" style="--f:5; --amp:0.152;"></i>
+            <i class="fio" style="--f:6; --amp:0.182;"></i>
+            <i class="fio" style="--f:7; --amp:0.212;"></i>
+            <i class="fio" style="--f:8; --amp:0.242;"></i>
+            <i class="fio" style="--f:9; --amp:0.273;"></i>
+            <i class="fio" style="--f:10; --amp:0.303;"></i>
+            <i class="fio" style="--f:11; --amp:0.333;"></i>
+            <i class="fio" style="--f:12; --amp:0.364;"></i>
+            <i class="fio" style="--f:13; --amp:0.394;"></i>
+            <i class="fio" style="--f:14; --amp:0.424;"></i>
+            <i class="fio" style="--f:15; --amp:0.455;"></i>
+            <i class="fio" style="--f:16; --amp:0.485;"></i>
+            <i class="fio" style="--f:17; --amp:0.515;"></i>
+            <i class="fio" style="--f:18; --amp:0.545;"></i>
+            <i class="fio" style="--f:19; --amp:0.576;"></i>
+            <i class="fio" style="--f:20; --amp:0.606;"></i>
+            <i class="fio" style="--f:21; --amp:0.636;"></i>
+            <i class="fio" style="--f:22; --amp:0.667;"></i>
+            <i class="fio" style="--f:23; --amp:0.697;"></i>
+            <i class="fio" style="--f:24; --amp:0.727;"></i>
+            <i class="fio" style="--f:25; --amp:0.758;"></i>
+            <i class="fio" style="--f:26; --amp:0.788;"></i>
+            <i class="fio" style="--f:27; --amp:0.818;"></i>
+            <i class="fio" style="--f:28; --amp:0.848;"></i>
+            <i class="fio" style="--f:29; --amp:0.879;"></i>
+            <i class="fio" style="--f:30; --amp:0.909;"></i>
+            <i class="fio" style="--f:31; --amp:0.939;"></i>
+            <i class="fio" style="--f:32; --amp:0.970;"></i>
+            <i class="fio" style="--f:33; --amp:1.000;"></i>
+          </span>
+        </span>
+        <span class="idioma-txt">
+          <strong>Português</strong>
+          <span class="idioma-nivel idioma-nivel--cheio">Nativo</span>
+        </span>
+      </div>
+
+      <h2 class="stack-title titulo-secao" data-block-reveal>STACK</h2>
+
+      <div class="idioma idioma--dir">
+        <span class="mastro" aria-hidden="true"></span>
+        <span class="pano">
+          <span class="bandeira bandeira--us" role="img" aria-label="Bandeira dos Estados Unidos">
+            <i class="fio" style="--f:0; --amp:1.000;"></i>
+            <i class="fio" style="--f:1; --amp:0.970;"></i>
+            <i class="fio" style="--f:2; --amp:0.939;"></i>
+            <i class="fio" style="--f:3; --amp:0.909;"></i>
+            <i class="fio" style="--f:4; --amp:0.879;"></i>
+            <i class="fio" style="--f:5; --amp:0.848;"></i>
+            <i class="fio" style="--f:6; --amp:0.818;"></i>
+            <i class="fio" style="--f:7; --amp:0.788;"></i>
+            <i class="fio" style="--f:8; --amp:0.758;"></i>
+            <i class="fio" style="--f:9; --amp:0.727;"></i>
+            <i class="fio" style="--f:10; --amp:0.697;"></i>
+            <i class="fio" style="--f:11; --amp:0.667;"></i>
+            <i class="fio" style="--f:12; --amp:0.636;"></i>
+            <i class="fio" style="--f:13; --amp:0.606;"></i>
+            <i class="fio" style="--f:14; --amp:0.576;"></i>
+            <i class="fio" style="--f:15; --amp:0.545;"></i>
+            <i class="fio" style="--f:16; --amp:0.515;"></i>
+            <i class="fio" style="--f:17; --amp:0.485;"></i>
+            <i class="fio" style="--f:18; --amp:0.455;"></i>
+            <i class="fio" style="--f:19; --amp:0.424;"></i>
+            <i class="fio" style="--f:20; --amp:0.394;"></i>
+            <i class="fio" style="--f:21; --amp:0.364;"></i>
+            <i class="fio" style="--f:22; --amp:0.333;"></i>
+            <i class="fio" style="--f:23; --amp:0.303;"></i>
+            <i class="fio" style="--f:24; --amp:0.273;"></i>
+            <i class="fio" style="--f:25; --amp:0.242;"></i>
+            <i class="fio" style="--f:26; --amp:0.212;"></i>
+            <i class="fio" style="--f:27; --amp:0.182;"></i>
+            <i class="fio" style="--f:28; --amp:0.152;"></i>
+            <i class="fio" style="--f:29; --amp:0.121;"></i>
+            <i class="fio" style="--f:30; --amp:0.091;"></i>
+            <i class="fio" style="--f:31; --amp:0.061;"></i>
+            <i class="fio" style="--f:32; --amp:0.030;"></i>
+            <i class="fio" style="--f:33; --amp:0.000;"></i>
+          </span>
+        </span>
+        <span class="idioma-txt">
+          <strong>Inglês</strong>
+          <span class="idioma-nivel">Intermediário</span>
+        </span>
+      </div>
+    </div>
+    </div>
+    </div>
+
+    <!-- Linguagens — rodando para a direita -->
+    <div class="stack-row">
+      <span class="stack-row-label">Linguagens</span>
+      <div class="stack-marquee stack-marquee--right">
+        <div class="stack-marquee-track">
+          <div class="stack-item"><i class="devicon-html5-plain"></i><span>HTML5</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-css3-plain"></i><span>CSS3</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-javascript-plain"></i><span>JavaScript</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-python-plain"></i><span>Python</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-html5-plain"></i><span>HTML5</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-css3-plain"></i><span>CSS3</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-javascript-plain"></i><span>JavaScript</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-python-plain"></i><span>Python</span></div>
+          <span class="stack-dot">\</span>
+        </div>
+        <div class="stack-marquee-track" aria-hidden="true">
+          <div class="stack-item"><i class="devicon-html5-plain"></i><span>HTML5</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-css3-plain"></i><span>CSS3</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-javascript-plain"></i><span>JavaScript</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-python-plain"></i><span>Python</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-html5-plain"></i><span>HTML5</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-css3-plain"></i><span>CSS3</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-javascript-plain"></i><span>JavaScript</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-python-plain"></i><span>Python</span></div>
+          <span class="stack-dot">\</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Frameworks e Design — rodando para a esquerda -->
+    <div class="stack-row">
+      <span class="stack-row-label">Frameworks e Design</span>
+      <div class="stack-marquee stack-marquee--left">
+        <div class="stack-marquee-track">
+          <div class="stack-item"><i class="devicon-bootstrap-plain"></i><span>Bootstrap 4</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-mobile-screen-button"></i><span>Design Responsivo</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-table-cells"></i><span>Flexbox</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="devicon-bootstrap-plain"></i><span>Bootstrap 4</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-mobile-screen-button"></i><span>Design Responsivo</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-table-cells"></i><span>Flexbox</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="devicon-bootstrap-plain"></i><span>Bootstrap 4</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-mobile-screen-button"></i><span>Design Responsivo</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-table-cells"></i><span>Flexbox</span></div>
+          <span class="stack-dot">/</span>
+        </div>
+        <div class="stack-marquee-track" aria-hidden="true">
+          <div class="stack-item"><i class="devicon-bootstrap-plain"></i><span>Bootstrap 4</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-mobile-screen-button"></i><span>Design Responsivo</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-table-cells"></i><span>Flexbox</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="devicon-bootstrap-plain"></i><span>Bootstrap 4</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-mobile-screen-button"></i><span>Design Responsivo</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-table-cells"></i><span>Flexbox</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="devicon-bootstrap-plain"></i><span>Bootstrap 4</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-mobile-screen-button"></i><span>Design Responsivo</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-table-cells"></i><span>Flexbox</span></div>
+          <span class="stack-dot">/</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Software e Ferramentas — rodando para a direita -->
+    <div class="stack-row">
+      <span class="stack-row-label">Software e Ferramentas</span>
+      <div class="stack-marquee stack-marquee--right">
+        <div class="stack-marquee-track">
+          <div class="stack-item"><i class="fa-solid fa-compass-drafting"></i><span>AutoCAD</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-git-plain"></i><span>Git</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-github-original"></i><span>GitHub</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><svg class="icone-svg" aria-hidden="true" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg"><path d="M80.46 82.605h-8.777l-.734-.733V61.326c0-3.656-1.436-6.489-5.844-6.588-2.269-.06-4.864 0-7.638.11l-.416.425v26.589l-.733.733H47.54l-.733-.733V46.764l.733-.733h19.753c7.677 0 13.899 6.22 13.899 13.898v21.943l-.733.733Z" fill="currentColor" opacity=".55"/><path d="M58.942 119.902v-26.33l.733-.734h8.797l.733.733v26.331l-.733.733h-8.796zm0-84.838V8.734L59.675 8h8.797l.733.733v26.331l-.733.733h-8.796zm68.335 34.385H92.169l-.733-.733V59.92l.733-.733h35.108l.733.733v8.797zm-91.436 0H.733L0 68.716V59.92l.733-.733h35.108l.733.733v8.797zm-8.49-35.633v-1.209l6.034-6.033h1.208l9.223 9.223v6.39l-.852.852h-6.39zm7.242 68.235h-1.208l-6.033-6.033v-1.209l9.223-9.222h6.39l.851.851v6.39z" fill="currentColor"/></svg><span>Netlify</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="fa-solid fa-file-excel"></i><span>Microsoft Excel</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-vscode-plain"></i><span>VSCode</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="fa-solid fa-compass-drafting"></i><span>AutoCAD</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-git-plain"></i><span>Git</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-github-original"></i><span>GitHub</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><svg class="icone-svg" aria-hidden="true" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg"><path d="M80.46 82.605h-8.777l-.734-.733V61.326c0-3.656-1.436-6.489-5.844-6.588-2.269-.06-4.864 0-7.638.11l-.416.425v26.589l-.733.733H47.54l-.733-.733V46.764l.733-.733h19.753c7.677 0 13.899 6.22 13.899 13.898v21.943l-.733.733Z" fill="currentColor" opacity=".55"/><path d="M58.942 119.902v-26.33l.733-.734h8.797l.733.733v26.331l-.733.733h-8.796zm0-84.838V8.734L59.675 8h8.797l.733.733v26.331l-.733.733h-8.796zm68.335 34.385H92.169l-.733-.733V59.92l.733-.733h35.108l.733.733v8.797zm-91.436 0H.733L0 68.716V59.92l.733-.733h35.108l.733.733v8.797zm-8.49-35.633v-1.209l6.034-6.033h1.208l9.223 9.223v6.39l-.852.852h-6.39zm7.242 68.235h-1.208l-6.033-6.033v-1.209l9.223-9.222h6.39l.851.851v6.39z" fill="currentColor"/></svg><span>Netlify</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="fa-solid fa-file-excel"></i><span>Microsoft Excel</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-vscode-plain"></i><span>VSCode</span></div>
+          <span class="stack-dot">\</span>
+        </div>
+        <div class="stack-marquee-track" aria-hidden="true">
+          <div class="stack-item"><i class="fa-solid fa-compass-drafting"></i><span>AutoCAD</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-git-plain"></i><span>Git</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-github-original"></i><span>GitHub</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><svg class="icone-svg" aria-hidden="true" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg"><path d="M80.46 82.605h-8.777l-.734-.733V61.326c0-3.656-1.436-6.489-5.844-6.588-2.269-.06-4.864 0-7.638.11l-.416.425v26.589l-.733.733H47.54l-.733-.733V46.764l.733-.733h19.753c7.677 0 13.899 6.22 13.899 13.898v21.943l-.733.733Z" fill="currentColor" opacity=".55"/><path d="M58.942 119.902v-26.33l.733-.734h8.797l.733.733v26.331l-.733.733h-8.796zm0-84.838V8.734L59.675 8h8.797l.733.733v26.331l-.733.733h-8.796zm68.335 34.385H92.169l-.733-.733V59.92l.733-.733h35.108l.733.733v8.797zm-91.436 0H.733L0 68.716V59.92l.733-.733h35.108l.733.733v8.797zm-8.49-35.633v-1.209l6.034-6.033h1.208l9.223 9.223v6.39l-.852.852h-6.39zm7.242 68.235h-1.208l-6.033-6.033v-1.209l9.223-9.222h6.39l.851.851v6.39z" fill="currentColor"/></svg><span>Netlify</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="fa-solid fa-file-excel"></i><span>Microsoft Excel</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-vscode-plain"></i><span>VSCode</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="fa-solid fa-compass-drafting"></i><span>AutoCAD</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-git-plain"></i><span>Git</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-github-original"></i><span>GitHub</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><svg class="icone-svg" aria-hidden="true" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg"><path d="M80.46 82.605h-8.777l-.734-.733V61.326c0-3.656-1.436-6.489-5.844-6.588-2.269-.06-4.864 0-7.638.11l-.416.425v26.589l-.733.733H47.54l-.733-.733V46.764l.733-.733h19.753c7.677 0 13.899 6.22 13.899 13.898v21.943l-.733.733Z" fill="currentColor" opacity=".55"/><path d="M58.942 119.902v-26.33l.733-.734h8.797l.733.733v26.331l-.733.733h-8.796zm0-84.838V8.734L59.675 8h8.797l.733.733v26.331l-.733.733h-8.796zm68.335 34.385H92.169l-.733-.733V59.92l.733-.733h35.108l.733.733v8.797zm-91.436 0H.733L0 68.716V59.92l.733-.733h35.108l.733.733v8.797zm-8.49-35.633v-1.209l6.034-6.033h1.208l9.223 9.223v6.39l-.852.852h-6.39zm7.242 68.235h-1.208l-6.033-6.033v-1.209l9.223-9.222h6.39l.851.851v6.39z" fill="currentColor"/></svg><span>Netlify</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="fa-solid fa-file-excel"></i><span>Microsoft Excel</span></div>
+          <span class="stack-dot">\</span>
+          <div class="stack-item"><i class="devicon-vscode-plain"></i><span>VSCode</span></div>
+          <span class="stack-dot">\</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Conceitos — rodando para a esquerda -->
+    <div class="stack-row">
+      <span class="stack-row-label">Conceitos</span>
+      <div class="stack-marquee stack-marquee--left">
+        <div class="stack-marquee-track">
+          <div class="stack-item"><i class="fa-solid fa-code"></i><span>Desenvolvimento Web Front-End</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-diagram-project"></i><span>Lógica de Programação</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-sitemap"></i><span>Estruturas de Controle e Dados</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-shield-halved"></i><span>Resiliência de Código</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-gears"></i><span>Engenharia de Controle e Automação</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-code"></i><span>Desenvolvimento Web Front-End</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-diagram-project"></i><span>Lógica de Programação</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-sitemap"></i><span>Estruturas de Controle e Dados</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-shield-halved"></i><span>Resiliência de Código</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-gears"></i><span>Engenharia de Controle e Automação</span></div>
+          <span class="stack-dot">/</span>
+        </div>
+        <div class="stack-marquee-track" aria-hidden="true">
+          <div class="stack-item"><i class="fa-solid fa-code"></i><span>Desenvolvimento Web Front-End</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-diagram-project"></i><span>Lógica de Programação</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-sitemap"></i><span>Estruturas de Controle e Dados</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-shield-halved"></i><span>Resiliência de Código</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-gears"></i><span>Engenharia de Controle e Automação</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-code"></i><span>Desenvolvimento Web Front-End</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-diagram-project"></i><span>Lógica de Programação</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-sitemap"></i><span>Estruturas de Controle e Dados</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-shield-halved"></i><span>Resiliência de Código</span></div>
+          <span class="stack-dot">/</span>
+          <div class="stack-item"><i class="fa-solid fa-gears"></i><span>Engenharia de Controle e Automação</span></div>
+          <span class="stack-dot">/</span>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ===================== Contato ===================== -->
+  <section class="contato" id="contato">
+        <h1 class="ct-title titulo-secao" data-block-reveal>CONTACT</h1>
+
+    <div class="contato-grid">
+
+      <div class="bio-animada">
+        <!-- O recorte não termina num corte reto: a base dele se dissolve no
+             fundo escuro da seção (máscara em degradê no CSS), e o rótulo
+             "Sobre mim" começa logo onde ele some. Assim a foto pertence ao
+             bloco de texto em vez de ficar apoiada em cima dele. -->
+        <figure class="bio-retrato">
+          <img src="assets/fernando-recorte.webp"
+               alt="Fernando de braços cruzados, de moletom branco"
+               width="760" height="1130" loading="lazy" decoding="async">
+        </figure>
+
+        <span class="contato-label">Sobre mim</span>
+        <p class="bio-texto" data-bio-reveal>
+          Sou o Fernando: nasci gostando de entender como as coisas funcionam por dentro
+          — e isso foi parar direto no código. Hoje transformo ideia em interface, tela em
+          experiência, e projeto em algo que as pessoas realmente usam.
+        </p>
+      </div>
+
+      <div class="contato-actions">
+
+        <div class="social-row">
+
+          <a class="button-icon" data-magnetic="14" href="https://www.instagram.com/_ferd14_/" target="_blank" rel="noopener noreferrer">
+            <div class="icon"><i class="fa-brands fa-instagram"></i></div>
+            <div class="cube">
+              <span class="side front">Instagram</span>
+              <span class="side top">_ferd14_</span>
+            </div>
+          </a>
+
+          <a class="button-icon" data-magnetic="14" href="https://www.linkedin.com/in/fernando-marques-da-cruz-105029346/" target="_blank" rel="noopener noreferrer">
+            <div class="icon"><i class="fa-brands fa-linkedin-in"></i></div>
+            <div class="cube">
+              <span class="side front">Linkedin</span>
+              <span class="side top">Fernando Marques da Cruz</span>
+            </div>
+          </a>
+
+          <a class="button-icon" data-magnetic="14" href="https://github.com/fernandomcruz" target="_blank" rel="noopener noreferrer">
+            <div class="icon"><i class="fa-brands fa-github"></i></div>
+            <div class="cube">
+              <span class="side front">GitHub</span>
+              <span class="side top">fernandomcruz</span>
+            </div>
+          </a>
+
+          <a class="button-icon" data-magnetic="14" href="mailto:fernandomarquecruz@gmail.com">
+            <div class="icon"><i class="fa-solid fa-envelope"></i></div>
+            <div class="cube">
+              <span class="side front">Email</span>
+              <span class="side top">fernandomarquecruz@gmail.com</span>
+            </div>
+          </a>
+
+        </div>
+
+        <a class="cv-button" data-magnetic="18" href="assets/curriculoFer.pdf" target="_blank" rel="noopener noreferrer">
+          <span class="circle" aria-hidden="true">
+            <span class="icon arrow"></span>
+          </span>
+          <span class="button-text">Ver currículo</span>
+        </a>
+
+      </div>
+
+    </div>
+
+    <p class="direitos">© 2025 Fernando Marques da Cruz. Todos os direitos reservados.</p>
+  </section>
+
+  <!-- ===================== Scripts ===================== -->
+  <script src="https://unpkg.com/typed.js@2.0.16/dist/typed.umd.js"></script>
+
+  <!-- assinatura animada (dados + motor, arquivo único) -->
+  <script src="js/assinatura.js"></script>
+  <script src="js/script.js"></script>
+  <script src="js/efeitos.js"></script>
+</body>
+</html>

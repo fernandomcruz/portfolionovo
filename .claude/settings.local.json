@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk 'length\\($0\\) < 300' js/assinatura.js)",
+      "Bash(python -)",
+      "Bash(node --check js/efeitos.js)",
+      "Bash(node --check js/script.js)",
+      "Bash(python -c ' *)",
+      "Bash(node --check js/assinatura.js)",
+      "Bash(curl -s --max-time 25 \"https://cdn.jsdelivr.net/gh/devicons/devicon@2.16.0/icons/netlify/netlify-original.svg\" -o /tmp/netlify.svg)",
+      "Read(//tmp/**)",
+      "Bash(curl -s --max-time 25 \"https://cdn.jsdelivr.net/gh/devicons/devicon@2.16.0/icons/netlify/netlify-original.svg\" -o netlify_tmp.svg)",
+      "Bash(rm -f netlify_tmp.svg)",
+      "Bash(rm -f _idiomas.css)",
+      "Bash(cd \"C:/Users/Usuário/Desktop/portifolionovo\" && ls -la assets/ && echo \"--- recentes na área de trabalho/downloads ---\" && ls -lt ~/Desktop 2>/dev/null | head -12 && ls -lt ~/Downloads 2>/dev/null | head -12)",
+      "Bash(python -c \"import PIL; print\\('Pillow', PIL.__version__\\)\")"
+    ]
+  }
+}

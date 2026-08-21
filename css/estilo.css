@@ -1,0 +1,2891 @@
+/* =========================================================================
+   VARIÁVEIS GLOBAIS
+   ========================================================================= */
+
+:root{
+  /* tamanho único dos títulos de seção (MY PROJECTS / STACK / CONTACT).
+     Antes eram três escalas bem diferentes — 48px, 220px e 200px — e as
+     seções não pareciam do mesmo site. */
+  --titulo-secao: clamp(46px, 7.5vw, 132px);
+
+  --bg: #0E0F0E;
+  --white: #f1ece1;
+  --accent: #ffb454;
+  --muted: #5b6270;
+  --darkgreen: #121412;
+  --lightgreen: #d9ff00;
+}
+
+/* =========================================================================
+   RESET
+   ========================================================================= */
+
+*{
+  box-sizing: border-box;
+}
+
+html, body{
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  background: var(--bg);
+  scroll-behavior: smooth;
+}
+
+/* Trava o vazamento lateral: várias seções usam 100vw / full-bleed e, com a
+   barra de rolagem vertical presente, 100vw fica MAIOR que a área visível.
+   ATENÇÃO ao trocar `clip` por `hidden` aqui: `overflow: hidden` transforma o
+   elemento num CONTAINER DE ROLAGEM, e isso mata o `position: sticky` de todos
+   os descendentes — ou seja, o pin do scroll horizontal do "Sobre" para de
+   grudar e a seção inteira desanda. `clip` corta igual, mas não cria container
+   de rolagem, então o sticky continua funcionando. */
+body{
+  overflow-x: clip;
+}
+
+/* quem pediu menos movimento no sistema não deve levar animação na cara */
+@media (prefers-reduced-motion: reduce){
+  html, body{ scroll-behavior: auto; }
+  *, *::before, *::after{
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* Aplicado nos três títulos de seção: só o tamanho e o ritmo da letra.
+   A família e a cor de cada um continuam vindo da sua própria regra. */
+.titulo-secao{
+  font-size: var(--titulo-secao);
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+}
+
+/* =========================================================================
+   HERO
+   Coluna vertical: rótulo no topo -> assinatura (canvas) ocupando o miolo
+   -> texto digitado embaixo. A assinatura usa o espaço que sobra, então o
+   hero nunca passa de 100vh nem gera scroll.
+   ========================================================================= */
+
+/* <hero> não é uma tag HTML padrão: o navegador a trata como display:inline,
+   e em elemento inline height/overflow são IGNORADOS. Por isso o display:flex
+   abaixo é obrigatório — sem ele o hero cresce sem controle e o canvas da
+   assinatura colapsa pra 0px de altura. */
+.hero{
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  min-height: 480px;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.hero .fixed{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.nome{
+  color: var(--white);
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 900;
+  font-size: small;
+  margin: 40px 0 0 40px;
+  flex-shrink: 0;
+}
+
+/* ---------- Assinatura animada (canvas) ---------- */
+
+.assinatura-wrap{
+  flex: 1 1 auto;
+  min-height: 180px;      /* garante caixa mesmo se o flex não resolver */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2vh 6vw 0;
+  overflow: hidden;
+}
+
+#assinatura{
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: transparent; /* o canvas é transparente: o fundo escuro aparece */
+}
+
+/* ---------- Texto digitado, abaixo da assinatura ---------- */
+
+.overlay{
+  position: static;        /* entra no fluxo da coluna do hero */
+  flex-shrink: 0;
+  padding: 0 7vw 8vh;
+  text-align: left;
+  pointer-events: none;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Tamanhos aumentados junto com a redução da assinatura (fillRatio no
+   js/assinatura.js): a assinatura passou a ocupar 82% da caixa dela, e esse
+   espaço vai pro texto, que agora divide melhor o peso da hero. */
+.typed-line{
+  margin: 0;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: clamp(32px, 5.6vw, 6.6rem);
+  color: var(--white);
+  line-height: 1.1;
+}
+
+.typed-nome{
+  display: block;
+  font-size: clamp(38px, 6.6vw, 7.8rem);
+}
+
+.typed-line .auto-type{
+  color: var(--lightgreen);
+}
+
+.typed-cursor{
+  color: #fff;
+  font-weight: 400;
+}
+
+@media (max-width: 900px){
+  .assinatura-wrap{ padding: 2vh 5vw 0; }
+}
+
+@media (max-width: 600px){
+  .nome{ margin: 28px 0 0 24px; }
+  .assinatura-wrap{ padding: 0 4vw; }
+  .overlay{ padding: 0 6vw 6vh; }
+}
+
+/* =========================================================================
+   TRANSIÇÃO EM ONDA (Hero -> Sobre)
+   ========================================================================= */
+
+/* margin-top era 100vh: no layout antigo o <hero> era inline (altura ~0) e essa
+   margem é que criava a tela do hero, com o .overlay absoluto por cima dela.
+   Agora que o .hero ocupa 100vh de verdade, manter a margem somava uma segunda
+   tela vazia logo abaixo do texto. Por isso: 0. */
+.conteudo{
+  position: relative;
+  display: flow-root;
+  z-index: 2;
+  margin-top: 0;
+  background: var(--white);
+  min-height: 100vh;
+}
+
+.conteudo-inner{
+  position: relative;
+  padding-top: 50px;
+}
+
+.wave-cap{
+  position: relative;
+  margin-top: -354px;
+  height: 354px;
+  width: 100%;
+  z-index: 2;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.wave-cap svg{
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.wave-cap path{
+  fill: var(--white);
+  stroke: var(--white);
+  stroke-width: 2px;
+}
+
+/* =========================================================================
+   SOBRE — SCROLL HORIZONTAL PINADO
+   ========================================================================= */
+
+.hs-outer{
+  position: relative;
+  height: 600vh; /* 5 painéis */
+}
+
+.hs-sticky{
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* width era 400vw com 5 painéis de 100vw (= 500vw): os painéis não encolhem
+   (flex-shrink: 0), então estouravam a caixa da track. max-content deixa a
+   largura sempre igual à soma real dos painéis, sem precisar acertar na mão
+   toda vez que um painel entra ou sai.
+   A transition foi removida: o script.js já faz a suavização por lerp em
+   requestAnimationFrame — as duas juntas somavam atraso e davam aquela
+   sensação de "gelatina" atrasada em relação ao scroll. */
+.hs-track{
+  display: flex;
+  height: 100vh;
+  width: max-content;
+  will-change: transform;
+}
+
+.hs-panel{
+  flex: 0 0 100vw;
+  height: 100vh;
+  display: grid;
+  place-items: center start;
+  margin: 0;
+  font-family: 'JetBrains Mono', monospace;
+  overflow: hidden;
+}
+
+.hs-panel--mid .texto{
+  margin-left: 200px;
+}
+
+/* Aqui existia um "long shadow" gigante (70 linhas de text-shadow indo até
+   3.15em) que nunca chegou a ser usado, porque a classe .panel-design não
+   existia no HTML. Ao ligar a classe, a sombra virou um bloco escuro sólido
+   de quase 1000px em cima do "I DESIGN." — no font-size daquele painel
+   (clamp até 30rem) o efeito não escala. Removido.
+   Pra ter um long shadow legível ali, ele precisa ser curto (uns 8 passos,
+   até ~0.4em) e mais claro que o texto, não da mesma cor. */
+
+.texto{
+  margin: 0 0 0 50px;
+  color: var(--bg);
+}
+
+.texto h3{
+  font-size: clamp(24px, 2vw, 10rem);
+  margin: 0;
+  line-height: 0.8;
+}
+
+.texto h2{
+  font-size: clamp(24px, 6vw, 10rem);
+  margin: 0;
+  line-height: 0.8;
+  font-weight: 900;
+}
+
+.texto h1{
+  font-size: clamp(24px, 16vw, 30rem);
+  margin: 0;
+  line-height: 0.8;
+  font-weight: 900;
+}
+
+
+/* =========================================================================
+   PAINEL "I DESIGN." — jardim 3D que se faz junto com o scroll
+
+   COMO A FLORAÇÃO É AMARRADA AO SCROLL
+   O js/script.js escreve `--prog` no painel: 0 quando ele ainda está entrando
+   pela direita, 1 quando terminou de atravessar. O CSS usa esse número como
+   AGULHA das animações, através de um `animation-delay` negativo.
+
+   O truque: uma animação pausada e com delay negativo fica congelada no ponto
+   exato do delay. Com `animation-delay: calc((var(--ini) - var(--prog)) * 1s)`
+   e `animation-play-state: paused`:
+     · --prog menor que --ini  -> delay positivo: ainda não começou, e o
+       `fill: both` segura o primeiro quadro;
+     · --prog == --ini         -> delay 0: começo exato;
+     · --prog == --ini + dur   -> delay -dur: último quadro;
+     · --prog maior            -> o `fill: both` segura o último quadro.
+   Ou seja: 1 unidade de --prog equivale a 1 segundo de linha do tempo, e
+   rolar pra frente e pra trás desenha e desfaz a flor. Não depende de
+   animation-timeline, que ainda não existe em todo navegador.
+
+   As flores não têm mais balanço em loop: quem dá o movimento agora é o
+   scroll, e assim o painel não gasta nada parado.
+   ========================================================================= */
+
+/* =====================================================================
+   REGRAS-BASE DOS DOIS PAINÉIS — NÃO APAGAR
+   Já se perderam QUATRO vezes em reescritas do bloco das flores, e cada
+   uma quebra algo visível:
+
+   · position: relative
+       O .jardim usa `inset: 0`. Sem uma âncora de posicionamento aqui, ele
+       se prende ao .hs-outer e passa a medir a TRACK INTEIRA (6400px): uma
+       flor em `left: 73.2%` vai parar em 4684px, muito além do painel, e
+       cresce fora da tela sem ninguém ver.
+   · .design-alvo em inline-flex
+       Cada letra é um <span> em sua própria linha no HTML, e as quebras
+       viram espaço de verdade: a palavra sai "D E S I G N ." esparramada.
+   · .d-letra
+       A cor das letras.
+
+   Ficam aqui em cima, separadas do bloco do jardim, justamente pra não
+   serem levadas junto na próxima reescrita.
+   ===================================================================== */
+
+.painel-design,
+.painel-develop{
+  position: relative;
+}
+
+.design-alvo{
+  display: inline-flex;
+  align-items: baseline;
+}
+
+.d-letra{
+  display: inline-block;
+  color: var(--bg);
+}
+
+.jardim{
+  position: absolute;
+  inset: 0;
+  /* POR CIMA do .texto (z-index 1): as flores encostam e passam por cima de
+     algumas letras, como adesivos colados na palavra. Antes ficavam atrás e o
+     encontro entre flor e letra não aparecia. */
+  z-index: 2;
+  pointer-events: none;
+  /* Sem perspectiva nem inclinação: as flores ficam de frente. A ideia de
+     profundidade vem só da diferença de tamanho entre elas e da sombra. */
+}
+
+.flor{
+  position: absolute;
+  left: var(--e);
+  top: var(--t);
+  /* --escala existe pro jardim inteiro poder encolher no mobile sem precisar
+     reescrever o tamanho de cada flor no HTML */
+  width: calc(var(--tam) * var(--escala, 1));
+  height: calc(var(--tam) * var(--escala, 1));
+  margin: calc(var(--tam) * var(--escala, 1) / -2);
+  transform: scale(0);
+  opacity: 0;
+
+}
+
+.flor svg{
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* ---------- a corola ---------- */
+
+/* As pétalas e o miolo NÃO se animam mais. A flor inteira é uma peça só, e o
+   único movimento é ela crescer — que foi o pedido: começar pequena e
+   aumentar bastante conforme se rola. Sem pétala abrindo uma a uma, sem
+   miolo dando pop: só escala. */
+
+.petala,
+.miolo{
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+}
+
+.petala{
+  stroke-linejoin: round;
+}
+
+/* Nada de anel concêntrico, brilho ou degradê no miolo: um círculo de cor
+   chapada e pronto. Era esse tipo de detalhe — junto com a sombra projetada
+   e o contorno em tom mais escuro — que dava à flor cara de ilustração
+   renderizada em vez de desenho. */
+
+/* ---------- cores ----------
+   Tudo CHAPADO: uma cor por pétala, uma cor por miolo, sem degradê e sem
+   tom mais escuro fingindo sombra.
+
+   O contorno é da cor do FUNDO do painel, não de uma versão escura da
+   pétala. A diferença é justamente a que separa desenho de ilustração
+   renderizada: um contorno escuro lê como sombreamento entre as pétalas;
+   um contorno da cor do fundo lê como recorte, como se cada pétala fosse
+   uma peça de papel colada sobre a outra. */
+
+.petala{
+  stroke: var(--white);
+  stroke-width: 2.5;
+}
+
+.miolo{ fill: #ffd23f; }
+
+.flor--rosa     .petala{ fill: #ff6fae; }
+.flor--lilas    .petala{ fill: #520440; }
+.flor--vermelha .petala{ fill: #e83b3b; }
+
+/* a de pétala amarela precisa de miolo marrom: amarelo com amarelo sumiria */
+.flor--amarela  .petala{ fill: var(--lightgreen); }
+.flor--amarela  .miolo { fill: #6b4423; }
+
+/* ---------- o crescimento, com o scroll na agulha ---------- */
+
+/* Uma animação PAUSADA com delay negativo fica congelada no ponto exato do
+   delay. Com `calc((var(--ini) - var(--prog)) * 1s)`, 1 unidade de --prog
+   vira 1 segundo de linha do tempo:
+     --prog menor que --ini     -> delay positivo: ainda não começou, e o
+                                   `fill: both` segura o primeiro quadro;
+     --prog == --ini            -> começo;
+     --prog == --ini + duração  -> último quadro;
+     --prog maior               -> o `fill: both` segura o último quadro.
+   Rolar pra frente faz crescer, rolar pra trás desfaz. Não depende de
+   animation-timeline, que ainda não existe em todo navegador. */
+.flor{
+  animation-name: florCresce;
+  /* cada flor tem a sua duração (--dur, no HTML): as que aparecem mais tarde
+     precisam de uma florada mais curta pra ainda fecharem antes de o painel
+     terminar de entrar */
+  animation-duration: var(--dur, .24s);
+  animation-timing-function: linear;
+  animation-delay: calc((var(--ini) - var(--prog, 0)) * 1s);
+  animation-play-state: paused;
+  animation-fill-mode: both;
+  animation-iteration-count: 1;
+}
+
+/* de bem pequena a inteira: quase 9 vezes de crescimento */
+@keyframes florCresce{
+  from{ opacity: 0;   transform: scale(.11); }
+  12% { opacity: 1; }
+  to  { opacity: 1;   transform: scale(1); }
+}
+
+/* ---------- a flutuação, por cima do crescimento ----------
+   A flor boia de leve, com um bambeio no meio do caminho.
+
+   Mora no <svg> DE DENTRO, não na .flor. O motivo: a .flor já tem a animação
+   do crescimento em `animation-play-state: paused`, e o play-state vale pra
+   TODAS as animações de um elemento — uma flutuação declarada ali nasceria
+   congelada junto. No filho ela roda livre, e os dois efeitos se compõem:
+   o div cresce, o svg boia.
+
+   Só anda com o painel na tela (.painel-vivo), então parado não custa nada. */
+.flor svg{
+  transform-origin: 50% 60%;    /* pivô mais embaixo: balança como se tivesse
+                                   um caule invisível prendendo */
+}
+
+.painel-design.painel-vivo .flor svg{
+  animation: florBoia var(--boia, 7s) ease-in-out infinite;
+  animation-delay: var(--boia-atraso, 0s);
+}
+
+/* tempos diferentes por flor: em uníssono pareceria um carrossel */
+.painel-design .flor:nth-child(1) svg{ --boia: 6.4s;  --boia-atraso: -0.0s; }
+.painel-design .flor:nth-child(2) svg{ --boia: 8.1s;  --boia-atraso: -2.1s; }
+.painel-design .flor:nth-child(3) svg{ --boia: 7.2s;  --boia-atraso: -3.4s; }
+.painel-design .flor:nth-child(4) svg{ --boia: 9.0s;  --boia-atraso: -1.2s; }
+
+@keyframes florBoia{
+  0%, 100%{ transform: translateY(0)     rotate(0deg); }
+  25%     { transform: translateY(-3.5%) rotate(2.2deg); }
+  50%     { transform: translateY(-1%)   rotate(0deg); }
+  75%     { transform: translateY(-4.5%) rotate(-2.2deg); }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .painel-design.painel-vivo .flor svg{ animation: none; }
+}
+
+/* a palavra fica abaixo do jardim: as flores é que passam por cima */
+.painel-design .texto{
+  position: relative;
+  z-index: 1;
+}
+
+
+/* =========================================================================
+   PAINEL "I DEVELOP." — montagem
+   As letras chegam tombadas pra trás e giram até assentar, uma a uma, como
+   peça que encaixa. A régua de build enche no mesmo compasso e fecha junto
+   com a última letra. Nada mais em volta.
+   ========================================================================= */
+
+.painel-develop .texto{
+  position: relative;
+  z-index: 1;
+}
+
+.dev-alvo{
+  /* inline-FLEX: cada letra é um <span> em sua própria linha no HTML, e as
+     quebras viram espaço de verdade. Em container flex esse espaço some. */
+  display: inline-flex;
+  align-items: baseline;
+  perspective: 700px;
+}
+
+.dv-letra{
+  display: inline-block;
+  transform-origin: 50% 100%;   /* gira apoiada na base, como peça assentando */
+  backface-visibility: hidden;
+}
+
+/* AS LETRAS SE MONTAM COM O SCROLL, não quando o observer resolve disparar.
+   Antes o repouso era "letra visível" e a animação só entrava com o painel a
+   55% na tela — a essa altura a palavra já estava lida, e o efeito acontecia
+   depois, do nada. Agora o primeiro quadro da animação (invisível, tombada)
+   é o próprio repouso, e o --prog é que empurra cada letra até o lugar.
+
+   A classe `dev-scrub` é posta pelo js/script.js. É ela que autoriza esconder:
+   sem o script, nenhuma animação entra e a palavra fica legível do jeito
+   normal, em vez de sumir esperando um --prog que não viria. */
+.painel-develop.dev-scrub .dv-letra{
+  animation-name: dvEncaixa;
+  animation-duration: .12s;
+  animation-timing-function: cubic-bezier(.34, 1.4, .64, 1);
+  animation-fill-mode: both;
+  animation-play-state: paused;
+  /* .16 é onde a palavra começa a entrar em cena; .05 de intervalo entre uma
+     letra e a seguinte, então as 8 assentam entre .16 e .63 do percurso */
+  animation-delay: calc((.16 + var(--i) * .05 - var(--prog, 0)) * 1s);
+}
+
+@keyframes dvEncaixa{
+  from{ opacity: 0; transform: rotateX(-92deg) translateY(.18em); }
+  60% { opacity: 1; }
+  to  { opacity: 1; transform: rotateX(0deg) translateY(0); }
+}
+
+/* ---------- régua de build ---------- */
+
+.build{
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 26px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.build-rotulo{
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: #6d7a3a;
+}
+
+.build-barra{
+  position: relative;
+  width: min(300px, 34vw);
+  height: 4px;
+  background: rgba(14, 15, 14, 0.14);
+  overflow: hidden;
+}
+
+.build-barra i{
+  position: absolute;
+  inset: 0;
+  background: var(--lightgreen);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+/* A régua enche no MESMO percurso das letras: começa junto com a primeira
+   (.16) e fecha junto com a última (.63) — daí a duração de .47. É isso que
+   faz parecer que uma coisa está construindo a outra. */
+.painel-develop.dev-scrub .build-barra i{
+  animation-name: buildEnche;
+  animation-duration: .47s;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-play-state: paused;
+  animation-delay: calc((.16 - var(--prog, 0)) * 1s);
+}
+
+@keyframes buildEnche{
+  to{ transform: scaleX(1); }
+}
+
+/* Sem o script (nenhuma classe dev-scrub), a régua ficaria parada em zero e
+   pareceria um carregamento travado. Cheia é o estado honesto: o projeto
+   está pronto. */
+.painel-develop:not(.dev-scrub) .build-barra i{
+  transform: scaleX(1);
+}
+
+/* ---------- telas pequenas ---------- */
+
+/* No painel de 375px as flores em tamanho cheio se atropelavam e a das
+   pontas vazava pela borda, ficando cortada pelo overflow do painel.
+   Metade do tamanho resolve as duas coisas de uma vez. */
+@media (max-width: 900px){
+  /* Duas coisas juntas: as flores encolhem E o espaço em que elas são
+     posicionadas se estreita. Só encolher não bastava, porque a rotação 3D
+     alarga a caixa projetada — as das pontas continuavam raspando a borda.
+     Com o inset lateral, as porcentagens de posição passam a se resolver
+     dentro de uma faixa menor, e todas se afastam das bordas de uma vez. */
+  .jardim{
+    --escala: .40;
+    inset: 0 11%;
+  }
+
+  .build{ margin-top: 18px; gap: 10px; }
+  .build-rotulo{ font-size: 10px; }
+}
+
+/* ---------- quem pediu menos movimento não leva nada disso ---------- */
+
+@media (prefers-reduced-motion: reduce){
+  .jardim{ display: none; }
+  .build-barra i{ transform: scaleX(1); }
+}
+
+/* fallback mobile: vira scroll horizontal nativo */
+@media (max-width: 768px){
+  .hs-outer{ height: auto; }
+  .hs-sticky{
+    position: static;
+    height: auto;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;              /* esconde a barra sem perder o gesto */
+  }
+  .hs-sticky::-webkit-scrollbar{ display: none; }
+  .hs-track{ transform: none !important; width: max-content; }
+  .hs-panel{ scroll-snap-align: start; }
+
+  /* os painéis usam fontes de até 16vw: no celular "DEVELOPER" estourava a
+     largura da tela e ficava cortado pela metade */
+  .hs-panel--mid .texto{ margin-left: 40px; }
+  .texto{ margin-left: 24px; }
+  .texto h1{ font-size: clamp(24px, 13vw, 30rem); }
+}
+
+/* =========================================================================
+   OLHO NO "O" DE SHOW
+   ========================================================================= */
+
+.eye-o{
+  display: inline-block;
+  width: 0.74em;
+  height: 0.74em;
+  vertical-align: -0.06em;
+  overflow: visible;
+}
+
+.eye-svg{
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.eye-ring{ fill: var(--bg); }
+.eye-white{ fill: var(--white); }
+.eye-iris{ fill: var(--lightgreen); }
+.eye-pupil{ fill: var(--bg); }
+.eye-glint{ fill: var(--white); }
+
+.eye-lid{
+  fill: var(--bg);
+  transform-box: fill-box;
+}
+
+.eye-lid-top{
+  transform-origin: top;
+  transform: scaleY(0);
+}
+
+.eye-lid-bottom{
+  transform-origin: bottom;
+  transform: scaleY(0);
+}
+
+/* sobrancelhas: 3 traços curtos, grossos e curvados, coladinhos no topo do olho */
+.eye-brow{
+  stroke: var(--bg);
+  stroke-width: 7;
+  stroke-linecap: round;
+  fill: none;
+}
+
+/* o piscar (fechar/abrir da pálpebra) é feito via JS, usando a Web Animations
+   API (script.js, função initShowEye) — mais confiável em elementos SVG do que
+   reiniciar uma animação CSS por classe. Duração e intervalo são ajustados lá. */
+
+@media (max-width: 768px){
+  .show-word:hover .eye-lid-top,
+  .show-word:hover .eye-lid-bottom{
+    animation: none;
+  }
+}
+
+/* =========================================================================
+   PROJETOS
+   ========================================================================= */
+
+/* o margin-top negativo existe pra ESCONDER a tela de pausa do pin — os
+   projetos sobem por cima dela. No mobile não existe pin nenhum (o CSS troca
+   por scroll horizontal nativo), então essa mesma margem subia os projetos
+   por cima do "MORE THAN A DEVELOPER" e engolia a seção inteira. */
+/* A seção tem 100vh e o índice ocupa pouca altura, então sobrava um vazio
+   grande embaixo e o conteúdo ficava grudado no topo. Centralizando na
+   vertical, o bloco todo desce e ganha ar dos dois lados. */
+.projetos{
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+
+  padding-top: 60px;
+  padding-bottom: 100px;
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  background: var(--bg);
+  margin-top: 0;
+  z-index: 100;
+  box-shadow: 0 -20px 50px rgba(0, 0, 0, 0.4);
+}
+
+@media (min-width: 769px){
+  .projetos{
+    margin-top: -100vh;
+
+    /* A seção é obrigada a ter 100vh — é ela que cobre a tela de pausa do pin
+       (o margin-top negativo acima). Só que o índice ocupa bem menos que
+       isso, e centralizar no meio dessa altura jogava o título pra 222px do
+       topo, baixo demais.
+       Com o respiro de baixo bem maior que o de cima, a centralização passa a
+       cair mais acima: o bloco sobe e o título fica por volta de 115px. */
+    padding-top: 40px;
+    padding-bottom: clamp(140px, 36vh, 330px);
+  }
+}
+
+.portfolio-gallery{
+  position: relative;
+  padding: 60px 24px 0;
+  margin: 0;
+}
+
+.pg-header{
+  text-align: center;
+  margin-bottom: 0;
+}
+
+.pg-title{
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  color: var(--white);
+  margin: 0;
+}
+
+/* ---------- Desktop: pilha 3D ancorada no rodapé da seção ---------- */
+
+/* ---------- Índice de projetos ----------
+   Uma linha por trabalho, no lugar do leque de cartas 3D. A régua de cima e
+   de baixo de cada linha dá o ar de índice de revista; o número em
+   monoespaçada e o nome grande fazem o contraste.
+
+   A arte entra POR DENTRO da linha, num espaço que já estava reservado: a
+   altura da linha é fixa e o recorte só abre. Assim, percorrer a lista não
+   empurra nada — nenhum salto de layout enquanto o mouse desce. */
+
+.pj-lista{
+  list-style: none;
+  /* respiro maior entre o título e a primeira linha */
+  margin: clamp(48px, 6.5vh, 88px) auto 0;
+  padding: 0;
+  max-width: 1200px;
+  width: 100%;
+}
+
+.pj-item{
+  border-top: 1px solid rgba(241, 236, 225, 0.16);
+}
+
+.pj-item:last-child{
+  border-bottom: 1px solid rgba(241, 236, 225, 0.16);
+}
+
+.pj-link{
+  position: relative;
+  display: grid;
+  /* número | nome (elástico) | tipo | seta */
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: clamp(16px, 3vw, 48px);
+  height: clamp(96px, 11.5vh, 138px);
+  padding: 0 clamp(16px, 2.5vw, 34px);
+  text-decoration: none;
+  overflow: hidden;          /* é o que recorta a arte enquanto ela entra */
+  transition: background-color .45s cubic-bezier(.22, 1, .36, 1);
+}
+
+.pj-link:hover{
+  background-color: rgba(217, 255, 0, 0.06);
+}
+
+.pj-num{
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: var(--lightgreen);
+  transition: transform .45s cubic-bezier(.22, 1, .36, 1);
+}
+
+.pj-nome{
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: clamp(20px, 2.8vw, 40px);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--white);
+  white-space: nowrap;
+  transition: transform .45s cubic-bezier(.22, 1, .36, 1),
+              color     .35s ease;
+}
+
+.pj-tipo{
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  transition: color .35s ease;
+}
+
+/* a seta é desenhada com borda, não com fonte: assim ela não depende do
+   Font Awesome ter carregado */
+.pj-seta{
+  width: 13px;
+  height: 13px;
+  border-top: 2px solid var(--muted);
+  border-right: 2px solid var(--muted);
+  transform: rotate(45deg);
+  transition: transform .45s cubic-bezier(.22, 1, .36, 1),
+              border-color .35s ease;
+}
+
+/* ---------- o que muda no hover ---------- */
+
+.pj-link:hover .pj-num  { transform: translateX(6px); }
+.pj-link:hover .pj-nome { transform: translateX(18px); color: var(--lightgreen); }
+.pj-link:hover .pj-tipo { color: var(--white); }
+
+.pj-link:hover .pj-seta{
+  transform: rotate(45deg) translate(4px, -4px);
+  border-color: var(--lightgreen);
+}
+
+/* ---------- a arte ---------- */
+
+.pj-arte{
+  position: absolute;
+  top: 50%;
+  right: clamp(58px, 7vw, 96px);   /* deixa a seta livre à direita */
+  translate: 0 -50%;
+  /* Ocupa a ALTURA INTEIRA da linha, encostando em cima e embaixo — é o
+     recorte que dá o ar de faixa. Sem aspect-ratio de propósito: a altura
+     vem da linha e o object-fit: cover cuida do enquadramento da imagem.
+     Sem canto arredondado, já que ela encosta nas bordas. */
+  height: 100%;
+  width: clamp(150px, 20vw, 260px);
+  overflow: hidden;
+  pointer-events: none;
+
+  /* fechada pela direita; no hover o recorte abre e ela desliza pra posição */
+  clip-path: inset(0 0 0 100%);
+  transform: translateX(26px);
+  transition: clip-path .55s cubic-bezier(.22, 1, .36, 1),
+              transform .55s cubic-bezier(.22, 1, .36, 1);
+}
+
+.pj-link:hover .pj-arte{
+  clip-path: inset(0 0 0 0);
+  transform: translateX(0);
+}
+
+.pj-arte img{
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: left top;
+  display: block;
+}
+
+/* ---------- toque e telas estreitas ----------
+   Sem mouse não existe hover, então a arte ficaria escondida pra sempre.
+   Aqui a linha vira bloco: nome em cima, arte sempre visível embaixo. */
+
+@media (hover: none), (max-width: 860px){
+  .pj-link{
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      "num  tipo"
+      "nome nome"
+      "arte arte";
+    height: auto;
+    gap: 10px clamp(12px, 3vw, 24px);
+    padding: 22px clamp(14px, 3vw, 24px) 26px;
+    overflow: visible;
+  }
+
+  .pj-num { grid-area: num; }
+  .pj-tipo{ grid-area: tipo; justify-self: end; }
+  .pj-nome{ grid-area: nome; white-space: normal; }
+
+  .pj-seta{ display: none; }
+
+  .pj-arte{
+    grid-area: arte;
+    position: static;
+    translate: none;
+    transform: none;
+    clip-path: none;
+    width: 100%;
+    /* No desktop a altura vem da linha (height: 100%). Aqui a linha não tem
+       altura fixa, então sem uma proporção a caixa colapsava pra 0 — a
+       imagem sumia, porque o <img> dentro dela pede height: 100% de um pai
+       de altura zero. */
+    height: auto;
+    aspect-ratio: 16 / 9;
+    margin-top: 6px;
+  }
+}
+
+/* =========================================================================
+   STACK
+   ========================================================================= */
+
+/* height: 100vh + overflow: hidden cortava a última linha do marquee em telas
+   baixas (num 1280x720 sobravam ~173px de conteúdo escondido). min-height
+   mantém a seção com uma tela cheia quando sobra espaço, mas deixa crescer
+   quando o conteúdo pede. O overflow agora corta só na horizontal, que é o
+   que o marquee full-bleed realmente precisa. */
+.stack-section{
+  position: relative;
+  background: var(--white);
+  width: 100%;
+  min-height: 100vh;
+  padding: 100px 0 80px;
+  overflow-x: hidden;
+}
+
+
+/* =========================================================================
+   IDIOMAS — bandeiras nas laterais da seção
+
+   A MONTAGEM
+   O mastro é RETO: sai da parede lateral a 90°, na horizontal. A bandeira
+   pende dele DEITADA — o pano leva um giro de 90°, de modo que a base dela
+   aponta para a lateral e a beirada da tralha fica encostada no mastro.
+
+   Por causa desse giro, as fatias do pano voltam a ser VERTICAIS no seu
+   próprio sistema: é a rotação do conjunto que as apresenta empilhadas na
+   tela. A vantagem é que a dobra continua sendo um rotateY em torno da
+   beirada presa, que é como pano presente se comporta de verdade.
+
+   Como .bandeira gira 90°, a caixa dela troca de eixo na tela. Quem segura o
+   espaço no layout é o .pano, com as medidas já trocadas: largura = a
+   beirada da tralha, altura = o comprimento do pano.
+
+   COMO O PANO FUNCIONA
+   Cada bandeira é uma imagem SVG embutida (sem CDN, sem requisição) repartida
+   em 14 fatias. Cada fatia mostra o seu pedaço da mesma imagem, e recebe a
+   MESMA animação com duas diferenças:
+
+     · o ATRASO cresce com o índice (--f), então a onda percorre o pano em vez
+       de todas as fatias irem juntas;
+     · a AMPLITUDE (--amp) vai de 0 na fatia presa ao mastro até 1 na ponta
+       solta. É essa rampa que prende a bandeira — sem ela o pano balança em
+       bloco e parece adesivo tremendo. A rampa vem invertida na bandeira da
+       direita, porque o giro joga a beirada presa para o outro lado.
+   ========================================================================= */
+
+.stack-topo{
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;   /* título ao centro, bandeiras nas beiradas */
+  align-items: start;
+  gap: clamp(20px, 4vw, 70px);
+  margin-bottom: 6rem;
+  padding: 0;                            /* as bandeiras encostam nas laterais */
+}
+
+.stack-topo .stack-title{
+  margin-bottom: 0;
+  white-space: nowrap;
+  align-self: center;
+}
+
+.idioma{
+  /* --comp = comprimento do pano (o lado longo da bandeira)
+     --larg = a beirada da tralha, que fica encostada no mastro */
+  --comp: clamp(130px, 14vw, 205px);
+  --larg: calc(var(--comp) * 0.7);
+
+  /* a espessura do mastro e a folga acima do pano andam juntas: o mastro é
+     encaixado logo acima da beirada, e as duas medidas saem daqui */
+  --mastro: 5px;
+  --folga: 16px;
+
+  /* o quanto o mastro avança antes de chegar na bandeira: é este recuo que
+     desgruda o pano da parede */
+  --recuo: clamp(34px, 5vw, 86px);
+
+  /* e o quanto ele passa DA bandeira. A ponta do pano balança no eixo Z e a
+     perspectiva joga essa ponta uns 16px além da caixa da bandeira; a sobra
+     tira a ponteira de baixo dela. Medido no pior instante do ciclo.
+
+     Repare que ela é multiplicada por --vento: quando a rajada do hover
+     aumenta a amplitude, a ponta avança mais, e o mastro precisa crescer junto
+     — senão a bandeira volta a atravessar a ponteira. Uma variável só comanda
+     as duas coisas, e elas não têm como sair de sincronia. */
+  --vento: 1;
+  --sobra: calc(clamp(22px, 1.8vw, 26px) * var(--vento));
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: var(--folga);             /* espaço para o mastro */
+}
+
+/* O pano encosta na ponta do mastro, não no meio do bloco. Alinhar pela parede
+   (e não centralizar) é o que deixa a conta do mastro fechada: ele vale sempre
+   --recuo + --larg, sem depender da largura do rótulo. */
+.idioma--esq{ align-items: flex-start; padding-left: var(--recuo); }
+.idioma--dir{ align-items: flex-end;  padding-right: var(--recuo); }
+
+/* o rótulo fica centrado debaixo da bandeira; se a etiqueta for mais larga que
+   o pano, ela sobra para dentro da seção, nunca para fora */
+.idioma-txt{ width: var(--larg); }
+
+
+.idioma--esq{ justify-self: start; }
+.idioma--dir{ justify-self: end; }
+
+/* ---------- o mastro ---------- */
+
+/* Reto e na horizontal: 90° em relação à parede.
+
+   Ele nasce colado na parede, atravessa o --recuo, cobre a beirada inteira da
+   tralha e ainda passa da bandeira por --sobra. Daí a largura ser
+   --recuo + --larg + --sobra.
+
+   O z-index é o segundo cinto: a ponta do pano oscila no eixo Z e chegava a
+   passar por cima da ponteira. A sobra já resolve na geometria; o z-index
+   garante na ordem de pintura, aconteça o que acontecer com a onda.
+
+   Na vertical ele encosta por baixo no topo do pano: o bloco tem --folga de
+   respiro, então a barra começa uma espessura antes disso. */
+.mastro{
+  position: absolute;
+  z-index: 2;
+  top: calc(var(--folga) - var(--mastro));
+  left: 0;
+  width: calc(var(--recuo) + var(--larg) + var(--sobra));
+  height: var(--mastro);
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--bg), #4a4f4a);
+}
+
+.idioma--dir .mastro{
+  left: auto;
+  right: 0;
+  background: linear-gradient(270deg, var(--bg), #4a4f4a);
+}
+
+/* a bucha, encostada na parede lateral */
+.mastro::before{
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -4px;
+  width: 13px;
+  height: 13px;
+  margin-top: -6.5px;
+  border-radius: 3px;
+  background: var(--bg);
+}
+
+.idioma--dir .mastro::before{ left: auto; right: -4px; }
+
+/* a ponteira na outra extremidade */
+.mastro::after{
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -5px;
+  width: 11px;
+  height: 11px;
+  margin-top: -5.5px;
+  border-radius: 50%;
+  background: var(--lightgreen);
+}
+
+.idioma--dir .mastro::after{ right: auto; left: -5px; }
+
+/* ---------- a caixa que segura o espaço ---------- */
+
+/* O .bandeira gira 90°, e transform NÃO muda o espaço que o elemento ocupa no
+   layout. Sem esta caixa com as medidas trocadas, o texto embaixo subiria por
+   cima do pano. */
+.pano{
+  position: relative;
+  display: block;
+  width: var(--larg);
+  height: var(--comp);
+  flex-shrink: 0;
+}
+
+/* ---------- o pano ---------- */
+
+.bandeira{
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  width: var(--comp);
+  height: var(--larg);
+  /* gira 90°: a base da bandeira passa a apontar para a lateral e a beirada
+     da tralha encosta no mastro. Na direita o giro é ao contrário, para a
+     base apontar para a parede daquele lado. */
+  transform: translate(-50%, -50%) rotate(90deg);
+  transform-origin: center;
+  /* a perspectiva mora AQUI, no pano, com o ponto de fuga na beirada presa */
+  perspective: 460px;
+  perspective-origin: 0% 50%;
+  filter: drop-shadow(4px 6px 8px rgba(14, 15, 14, .32));
+}
+
+.idioma--dir .bandeira{
+  transform: translate(-50%, -50%) rotate(-90deg);
+  perspective-origin: 100% 50%;
+}
+
+/* O pano é fatiado porque só assim ele DOBRA: cada fatia gira o seu tanto e o
+   conjunto vira uma curva. O preço é a faceta — dá pra contar as fatias.
+
+   Duas coisas apagam as emendas:
+
+   · SÃO 34, não 14. O salto de ângulo entre vizinhas cai de ~2,3° para ~1,2°,
+     e o de profundidade de ~1,8px para menos de 1px. Abaixo de um grau o olho
+     lê curva, não polígono. O mesmo vale para o sombreado: a variação de luz
+     vira degradê em vez de listra.
+
+   · ELAS SE SOBREPÕEM. Ao dobrar, vizinhas se afastam na tela e abrem uma
+     fresta — medi até 2,8px — que aparece como risco claro cortando o pano.
+     Cada fatia é desenhada --emenda px MAIS LARGA que o seu lugar, e a margem
+     negativa devolve essa sobra ao layout, então o pano continua com o
+     comprimento exato.
+
+     E a sobra é pixel-correta, não remendo: como o background-position ancora
+     a imagem na beirada esquerda da fatia, os pixels a mais são exatamente a
+     continuação do desenho — a mesma coisa que a vizinha mostra ali. */
+.fio{
+  /* Dimensionada pelo PIOR caso, que é a rajada do hover: com --vento em 1,5 a
+     onda abre mais as fatias e 6px já deixavam passar 1,7px de fresta.
+     Deliberadamente um valor fixo, e não algo multiplicado por --vento: largura
+     de fatia é layout, e animá-la em 68 elementos durante o hover custaria um
+     recálculo por quadro. Sobrepor demais não tem preço nenhum — o excesso fica
+     debaixo da vizinha. */
+  --emenda: 12px;
+
+  /* Sombra junto da tralha. Em foto de bandeira o pano sempre fecha mais
+     escuro onde está amarrado — é ali que ele amassa e sobra tecido — e vai
+     abrindo até a ponta solta. Sem isso o pano fica com cara de adesivo.
+
+     Ela é CAMADA DE FUNDO DA FATIA, e não um véu por cima da bandeira inteira,
+     justamente para dobrar junto com o tecido e ficar recortada na fatia. Um
+     véu inteiriço volta a ser aquele retângulo chapado. */
+  --sombra-tralha: linear-gradient(90deg,
+    rgba(90, 92, 88, .34) 0%,
+    rgba(90, 92, 88, .12) 14%,
+    rgba(90, 92, 88, 0)  38%);
+
+  flex: 0 0 auto;
+  width: calc(var(--comp) / 34 + var(--emenda));
+  margin-right: calc(var(--emenda) * -1);
+
+  /* As duas camadas usam o MESMO tamanho e a MESMA posição: a sombra é medida
+     na bandeira inteira, igual ao desenho, e cada fatia mostra o seu pedaço
+     das duas. Assim o degradê atravessa o pano sem emenda. */
+  background-image: var(--sombra-tralha), var(--pano-img);
+  background-repeat: no-repeat;
+  background-size: var(--comp) var(--larg), var(--comp) var(--larg);
+  /* cada fatia puxa o seu pedaço da mesma imagem */
+  background-position: calc(var(--f) * (var(--comp) / -34)) 0,
+                       calc(var(--f) * (var(--comp) / -34)) 0;
+  background-blend-mode: multiply, normal;
+
+  transform-origin: center left;
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+/* Na bandeira da direita quem encosta no mastro é a beirada OPOSTA — o giro de
+   -90° põe a outra ponta lá em cima. A sombra vira de lado junto. */
+.idioma--dir .fio{
+  --sombra-tralha: linear-gradient(270deg,
+    rgba(90, 92, 88, .34) 0%,
+    rgba(90, 92, 88, .12) 14%,
+    rgba(90, 92, 88, 0)  38%);
+}
+
+/* a última não invade ninguém — passaria da beirada solta do pano */
+.fio:last-of-type{
+  width: calc(var(--comp) / 34);
+  margin-right: 0;
+}
+
+.idioma--dir .fio{ transform-origin: center right; }
+
+.bandeira--br{ --pano-img: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 14'><rect width='20' height='14' fill='%23009c3b'/><path d='M10 1.3 18.4 7 10 12.7 1.6 7Z' fill='%23ffdf00'/><circle cx='10' cy='7' r='3.4' fill='%23002776'/><path d='M6.9 5.6a3.4 3.4 0 0 1 6.3 1.1 9 9 0 0 0-6.3-1.1Z' fill='%23fff'/></svg>"); }
+
+.bandeira--us{ --pano-img: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 14'><rect width='20' height='14' fill='%23fff'/><rect y='0.0' width='20' height='1.077' fill='%23b31942'/><rect y='2.154' width='20' height='1.077' fill='%23b31942'/><rect y='4.308' width='20' height='1.077' fill='%23b31942'/><rect y='6.462' width='20' height='1.077' fill='%23b31942'/><rect y='8.615' width='20' height='1.077' fill='%23b31942'/><rect y='10.769' width='20' height='1.077' fill='%23b31942'/><rect y='12.923' width='20' height='1.077' fill='%23b31942'/><rect width='8.0' height='7.538' fill='%230a3161'/><g fill='%23fff'><circle cx='0.667' cy='0.754' r='.165'/><circle cx='2.0' cy='0.754' r='.165'/><circle cx='3.333' cy='0.754' r='.165'/><circle cx='4.667' cy='0.754' r='.165'/><circle cx='6.0' cy='0.754' r='.165'/><circle cx='7.333' cy='0.754' r='.165'/><circle cx='1.333' cy='1.508' r='.165'/><circle cx='2.667' cy='1.508' r='.165'/><circle cx='4.0' cy='1.508' r='.165'/><circle cx='5.333' cy='1.508' r='.165'/><circle cx='6.667' cy='1.508' r='.165'/><circle cx='0.667' cy='2.262' r='.165'/><circle cx='2.0' cy='2.262' r='.165'/><circle cx='3.333' cy='2.262' r='.165'/><circle cx='4.667' cy='2.262' r='.165'/><circle cx='6.0' cy='2.262' r='.165'/><circle cx='7.333' cy='2.262' r='.165'/><circle cx='1.333' cy='3.015' r='.165'/><circle cx='2.667' cy='3.015' r='.165'/><circle cx='4.0' cy='3.015' r='.165'/><circle cx='5.333' cy='3.015' r='.165'/><circle cx='6.667' cy='3.015' r='.165'/><circle cx='0.667' cy='3.769' r='.165'/><circle cx='2.0' cy='3.769' r='.165'/><circle cx='3.333' cy='3.769' r='.165'/><circle cx='4.667' cy='3.769' r='.165'/><circle cx='6.0' cy='3.769' r='.165'/><circle cx='7.333' cy='3.769' r='.165'/><circle cx='1.333' cy='4.523' r='.165'/><circle cx='2.667' cy='4.523' r='.165'/><circle cx='4.0' cy='4.523' r='.165'/><circle cx='5.333' cy='4.523' r='.165'/><circle cx='6.667' cy='4.523' r='.165'/><circle cx='0.667' cy='5.277' r='.165'/><circle cx='2.0' cy='5.277' r='.165'/><circle cx='3.333' cy='5.277' r='.165'/><circle cx='4.667' cy='5.277' r='.165'/><circle cx='6.0' cy='5.277' r='.165'/><circle cx='7.333' cy='5.277' r='.165'/><circle cx='1.333' cy='6.031' r='.165'/><circle cx='2.667' cy='6.031' r='.165'/><circle cx='4.0' cy='6.031' r='.165'/><circle cx='5.333' cy='6.031' r='.165'/><circle cx='6.667' cy='6.031' r='.165'/><circle cx='0.667' cy='6.785' r='.165'/><circle cx='2.0' cy='6.785' r='.165'/><circle cx='3.333' cy='6.785' r='.165'/><circle cx='4.667' cy='6.785' r='.165'/><circle cx='6.0' cy='6.785' r='.165'/><circle cx='7.333' cy='6.785' r='.165'/></g></svg>"); }
+
+/* ---------- a tremulação ---------- */
+
+.idioma .fio{
+  animation: panoTremula 2.6s ease-in-out infinite;
+  /* Atraso negativo: a onda já nasce espalhada, em vez de todas as fatias
+     partirem do zero no primeiro quadro.
+     O passo acompanha a contagem de fatias — 26 × 0.062s dá o mesmo 1,56s de
+     defasagem ponta a ponta de quando eram 14 × 0.12s. A onda continua com o
+     mesmo comprimento; o que mudou foi só a resolução dela. */
+  animation-delay: calc(var(--f) * -0.030s);
+}
+
+/* --vento multiplica a amplitude inteira da onda. Vale 1 em repouso e sobe no
+   hover, o que dá a rajada. Precisa de @property por dois motivos: sem o tipo
+   declarado a variável é só um texto, e aí ela nem interpola (a rajada entraria
+   de golpe) nem pode ser usada dentro de calc() com segurança. */
+@property --vento{
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 1;
+}
+
+@keyframes panoTremula{
+  0%, 100%{
+    transform: translateZ(0) rotateY(0deg) translateY(0) skewY(0deg);
+    filter: brightness(1);
+  }
+  25%{
+    transform:
+      translateZ(calc(var(--amp) * var(--vento) * 24px))
+      rotateY(calc(var(--amp) * var(--vento) * 30deg))
+      translateY(calc(var(--amp) * var(--vento) * -6px))
+      skewY(calc(var(--amp) * var(--vento) * 4deg));
+    filter: brightness(calc(1 + var(--amp) * 0.16));
+  }
+  50%{
+    transform: translateZ(0) rotateY(0deg) translateY(0) skewY(0deg);
+    filter: brightness(1);
+  }
+  75%{
+    transform:
+      translateZ(calc(var(--amp) * var(--vento) * -24px))
+      rotateY(calc(var(--amp) * var(--vento) * -30deg))
+      translateY(calc(var(--amp) * var(--vento) * 6px))
+      skewY(calc(var(--amp) * var(--vento) * -4deg));
+    filter: brightness(calc(1 - var(--amp) * 0.2));
+  }
+}
+
+/* Aqui morava uma faixa de luz varrendo o pano, num <span> esticado por cima
+   da bandeira inteira. Ela saiu, e o motivo vale ficar registrado:
+
+   uma camada com inset: 0 é um RETÂNGULO CHAPADO. Ela não dobra junto com as
+   fatias — e como o drop-shadow do .bandeira projeta a silhueta de tudo que
+   está dentro dele, o retângulo virava uma sombra quadrada aparecendo por trás
+   do pano. Era a "caixa atrás da bandeira".
+
+   Toda sombra e todo brilho do tecido agora moram DENTRO das fatias, que é o
+   único jeito de acompanharem a dobra: o degradê da tralha entrou como camada
+   do background de cada fatia, e a variação de luz é o filter: brightness dos
+   próprios keyframes. Se um dia voltar a fazer falta uma camada por cima do
+   pano inteiro, ela precisa ser fatiada do mesmo jeito. */
+
+/* ---------- o rótulo ---------- */
+
+/* Duas linhas: o nome da língua e, embaixo, o nível numa etiqueta. Ela vem
+   sólida no nativo e só contornada no intermediário — a diferença de peso já
+   conta o nível sozinha, sem precisar de medidor.
+
+   As cores saem da paleta do site: preto do texto sobre o creme da seção. */
+.idioma-txt{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.idioma-txt strong{
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: clamp(14px, 1.15vw, 18px);
+  font-weight: 700;
+  letter-spacing: -.01em;
+  text-transform: uppercase;
+  color: var(--bg);
+}
+
+.idioma-nivel{
+  padding: 5px 12px 4px;
+  border: 1.5px solid var(--bg);
+  border-radius: 999px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(8px, .7vw, 10px);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--bg);
+  white-space: nowrap;
+}
+
+.idioma-nivel--cheio{
+  background: var(--bg);
+  color: var(--white);
+}
+
+/* ---------- a entrada: cada conjunto chega pela sua lateral ----------
+
+   Mastro, pano e rótulo viajam juntos, porque quem se desloca é o bloco
+   inteiro — é o mastro sendo enfiado na parede, com a bandeira pendurada
+   nele. A seção tem overflow-x: hidden, então a viagem acontece escondida
+   fora da borda.
+
+   O estado escondido só existe sob .idiomas-prontos, classe que o próprio JS
+   põe na página. Sem script, sem classe, e as bandeiras nascem no lugar —
+   nada aqui é capaz de deixar conteúdo invisível por conta própria. */
+
+/* ATENÇÃO: `transition` é atalho e SUBSTITUI a lista inteira do elemento. O
+   --vento (a rajada do hover, mais abaixo) precisa estar em TODA lista que
+   valha para .idioma, senão ele entra de golpe em vez de crescer. Já quebrei
+   hover assim duas vezes neste arquivo. */
+.idioma{ transition: --vento .5s ease-out; }
+
+.idiomas-prontos .idioma{
+  opacity: 0;
+  transition: transform 1.05s cubic-bezier(.19, 1, .22, 1),
+              opacity   .5s  ease-out,
+              --vento   .5s  ease-out;
+}
+
+.idiomas-prontos .idioma--esq{ transform: translateX(calc(-100% - 14vw)); }
+.idiomas-prontos .idioma--dir{ transform: translateX(calc( 100% + 14vw)); }
+
+/* a direita sai um tico depois: as duas chegando no mesmo quadro parecem uma
+   coisa só se abrindo, e não dois mastros sendo montados.
+   O zero final é do --vento: o atraso é da ENTRADA, e não faz sentido a
+   rajada do hover chegar atrasada nessa bandeira pelo resto da visita. */
+.idiomas-prontos .idioma--dir{ transition-delay: .12s, .12s, 0s; }
+
+/* chegada — vale tanto pela animação quanto pelo caminho de segurança */
+.idiomas-prontos .idioma.idioma-entra,
+.idiomas-prontos .idioma.idioma-visivel{
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* ---------- o hover: uma rajada de vento ----------
+
+   Nada de seguir o cursor — a bandeira não sabe nem quer saber onde o mouse
+   está dentro dela. O que ela sente é só que alguém chegou perto: o vento
+   aperta. A onda ganha amplitude (--vento), acelera (playbackRate, no
+   efeitos.js), o pano escurece a sombra como se enchesse, o reflexo fica mais
+   forte e a etiqueta do nível acende.
+
+   Acelerar por playbackRate em vez de trocar a duração é de propósito: mudar
+   `animation-duration` no meio do ciclo joga a onda para outro ponto do
+   percurso e dá um salto feio. O playbackRate muda só o ritmo, e a fase
+   continua de onde estava.
+
+   Só onde existe mouse de verdade: no toque, `:hover` gruda depois do tap e a
+   bandeira ficaria ventando para sempre. */
+@media (hover: hover) and (pointer: fine){
+
+  .idioma:hover{ --vento: 1.5; }
+
+  .bandeira{ transition: filter .45s ease-out; }
+
+  .idioma:hover .bandeira{
+    filter: drop-shadow(7px 11px 14px rgba(14, 15, 14, .42));
+  }
+
+  /* a ponteira do mastro dá uma inchada, como se o mastro vibrasse junto */
+  .mastro::after{ transition: scale .45s cubic-bezier(.34, 1.56, .64, 1); }
+  .idioma:hover .mastro::after{ scale: 1.4; }
+
+  /* a etiqueta vazada preenche; a que já é cheia não muda, e é justamente por
+     isso que a regra é uma só — o estado final das duas é o mesmo */
+  .idioma-nivel{ transition: background-color .35s ease, color .35s ease; }
+  .idioma:hover .idioma-nivel{
+    background: var(--bg);
+    color: var(--white);
+  }
+}
+
+/* ---------- fora da tela não gasta nada ---------- */
+
+.idioma.fora-da-tela .fio{
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce){
+  .idiomas-prontos .idioma{
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+@media (max-width: 900px){
+  .stack-topo{
+    grid-template-columns: 1fr 1fr;
+    gap: 18px 12px;
+    margin-bottom: 3.2rem;
+  }
+  /* no estreito o título passa pra cima e as bandeiras dividem a linha */
+  .stack-topo .stack-title{ grid-column: 1 / -1; order: -1; }
+  .idioma{ --comp: clamp(100px, 27vw, 155px); }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .idioma .fio{ animation: none; }
+}
+
+.stack-title{
+  margin: 0;
+  padding: 0 40px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  color: var(--bg);
+  text-align: center;
+}
+
+.stack-row{
+  margin-bottom: 70px;
+}
+
+.stack-row:last-child{
+  margin-bottom: 0;
+}
+
+.stack-row-label{
+  display: block;
+  max-width: 1300px;
+  margin: 0 auto 18px;
+  padding: 0 40px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--bg);
+  opacity: 0.65;
+}
+
+/* ---------- Marquee (duas trilhas idênticas, para o loop ficar contínuo) ---------- */
+/* full-bleed: ocupa 100% da largura da tela, independente do container centralizado do label */
+
+/* O `overflow: hidden` aqui é obrigatório: é ele que esconde a trilha que
+   está fora da tela e faz o marquee parecer infinito. Só que ele corta em
+   TODAS as direções — então o item que sobe no hover (translateY(-6px), mais
+   o ícone crescendo 22%) ficava decapitado na borda de cima.
+
+   A saída é dar respiro vertical por dentro: o corte acontece na borda da
+   caixa de padding, não na do conteúdo. Com padding em cima e embaixo, o item
+   levantado passa a ter para onde ir. A margem negativa de mesmo valor devolve
+   a altura original, então nada na página se desloca por causa disso. */
+.stack-marquee{
+  display: flex;
+  overflow: hidden;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+
+  padding-top: 18px;
+  padding-bottom: 18px;
+  margin-top: -18px;
+  margin-bottom: -18px;
+}
+
+.stack-marquee-track{
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 48px;
+  padding-right: 48px;
+}
+
+.stack-marquee:hover .stack-marquee-track{
+  animation-play-state: paused;
+}
+
+.stack-marquee--right .stack-marquee-track{
+  animation: stackMarqueeRight 34s linear infinite;
+}
+
+.stack-marquee--left .stack-marquee-track{
+  animation: stackMarqueeLeft 34s linear infinite;
+}
+
+@keyframes stackMarqueeLeft{
+  0%   { transform: translateX(0%); }
+  100% { transform: translateX(-100%); }
+}
+
+@keyframes stackMarqueeRight{
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(0%); }
+}
+
+.stack-item{
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  white-space: nowrap;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(10px, 1vw, 50px);
+  font-weight: 600;
+  color: var(--bg);
+}
+
+.stack-item i{
+  font-size: clamp(38px, 2vw, 72px);
+  color: var(--bg);
+}
+
+/* O ícone do Netlify é um SVG embutido, não um glifo de fonte: o devicon
+   2.15.1 (a versão presa no <link>) simplesmente NÃO tem a classe
+   `devicon-netlify-plain` — ela só apareceu na 2.16.0 — então o <i> ficava
+   com content: none e largura 0, um buraco no meio do marquee.
+   Embutir o SVG oficial resolve sem subir a versão do CDN (a 2.16.0 tem o
+   dobro do tamanho, 103KB contra 53KB) e sem depender da rede pra esse ícone.
+   O tamanho vem de `height: 1em` pra ele acompanhar exatamente a mesma
+   escala dos glifos vizinhos, e o fill é currentColor pra herdar a cor —
+   inclusive a troca no hover. */
+.stack-item .icone-svg{
+  height: clamp(38px, 2vw, 72px);
+  width: auto;
+  color: var(--bg);
+  flex-shrink: 0;
+}
+
+.stack-dot{
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(10px, 2vw, 56px);
+  color: var(--bg);
+  opacity: 0.35;
+}
+
+@media (max-width: 600px){
+  .stack-title{ margin-bottom: 46px; }
+  .stack-row{ margin-bottom: 40px; }
+}
+
+/* =========================================================================
+   CONTATO (título da seção)
+   ========================================================================= */
+
+.ct-title{
+  color: var(--white);
+  display: block;
+  text-align: center;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.direitos{
+  color: var(--white);
+  display: flex;
+  justify-content: center;
+  align-items: end;
+}
+
+/* =========================================================================
+   MENU HAMBÚRGUER — BOTÃO FIXO
+   Ícone: 3 barrinhas do mesmo tamanho (hambúrguer clássico). O contorno
+   do botão fica fixo, sem animação de arredondar. Ao abrir, as 2 de fora
+   deslizam até o centro girando pra formar um X (com uma leve "mola" no
+   movimento), e a do meio some.
+   ========================================================================= */
+
+.menu-toggle{
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 200; /* precisa ficar acima de TODAS as seções (ex: .projetos usa z-index: 100) */
+  width: 48px;
+  height: 48px;
+  background: transparent;
+  border: 3px solid #fff;
+  border-radius: 20%;
+  cursor: pointer;
+  padding: 0;
+  /* inverte automaticamente conforme o fundo por trás (claro <-> escuro) */
+  mix-blend-mode: difference;
+  /* força a própria camada de composição — evita artefatos de subpixel
+     nos elementos internos quando usamos mix-blend-mode */
+  transform: translateZ(0);
+}
+
+/* pulinho elástico do botão inteiro a cada clique — a classe é
+   removida/readicionada via JS pra poder rodar de novo em cada clique */
+.menu-toggle.mt-bounce{
+  animation: mtBounce .5s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+@keyframes mtBounce{
+  0%   { transform: translateZ(0) scale(1); }
+  35%  { transform: translateZ(0) scale(.8); }
+  70%  { transform: translateZ(0) scale(1.08); }
+  100% { transform: translateZ(0) scale(1); }
+}
+
+.mt-bar{
+  position: absolute;
+  left: 50%;
+  width: 26px;
+  margin-left: -13px;
+  height: 3px;
+  border-radius: 2px;
+  background: #fff;
+  mix-blend-mode: difference;
+  /* mantém a barra sempre na sua própria camada de composição, com o mesmo
+     transform "base" (translateZ(0)) em repouso e depois de girar — assim
+     o navegador nunca troca de camada no meio do caminho, o que é o que
+     causava a barra 1 renderizar mais fina depois do primeiro clique */
+  transform: translateZ(0);
+  transition:
+    top       .45s cubic-bezier(.34, 1.56, .64, 1),
+    transform .45s cubic-bezier(.34, 1.56, .64, 1),
+    opacity   .3s  ease;
+}
+
+.mt-bar-1{ top: 14px; }
+.mt-bar-2{ top: 22px; }
+.mt-bar-3{ top: 30px; }
+
+/* aberto: as barras de fora deslizam até o centro e giram formando o X;
+   a do meio encolhe e some. Um pequeno atraso nas de fora dá mais
+   personalidade ao movimento. */
+.menu-toggle.open .mt-bar-1{
+  top: 22px;
+  transform: translateZ(0) rotate(45deg);
+  transition-delay: .05s;
+}
+
+.menu-toggle.open .mt-bar-2{
+  opacity: 0;
+  transform: translateZ(0) scaleX(0);
+}
+
+.menu-toggle.open .mt-bar-3{
+  top: 22px;
+  transform: translateZ(0) rotate(-45deg);
+  transition-delay: .05s;
+}
+
+@media (max-width: 600px){
+  .menu-toggle{ width: 42px; height: 42px; }
+  .mt-bar{ width: 22px; margin-left: -11px; }
+  .mt-bar-1{ top: 12px; }
+  .mt-bar-2{ top: 19px; }
+  .mt-bar-3{ top: 26px; }
+
+  .menu-toggle.open .mt-bar-1,
+  .menu-toggle.open .mt-bar-3{
+    top: 19px;
+  }
+}
+
+/* =========================================================================
+   MENU HAMBÚRGUER — OVERLAY DE PÁGINA INTEIRA
+   ========================================================================= */
+
+.menu-panel{
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: var(--bg);
+  z-index: 150; /* acima de .projetos (100), abaixo do botão (200) */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  transform: translateY(-100%);
+  pointer-events: none;
+  /* pointer-events sozinho só tirava o mouse: os 9 links continuavam na ordem
+     do TAB e dava pra "entrar" no menu fechado com o teclado, focando coisas
+     invisíveis fora da tela. visibility: hidden tira os filhos do foco e ainda
+     é animável (por isso o delay: espera o painel subir antes de sumir). */
+  visibility: hidden;
+  transition:
+    transform  .55s cubic-bezier(.65, 0, .35, 1),
+    visibility 0s linear .55s;
+}
+
+.menu-panel.open{
+  transform: translateY(0);
+  pointer-events: auto;
+  visibility: visible;
+  transition:
+    transform  .55s cubic-bezier(.65, 0, .35, 1),
+    visibility 0s linear 0s;
+}
+
+.menu-content{
+  position: relative;
+  z-index: 1; /* fica acima das linhas onduladas de fundo (.menu-waves) */
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: row; /* fotos à esquerda, links + card de redes à direita */
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6vw;
+  gap: 40px;
+  font-family: 'Space Grotesk', sans-serif;
+
+  opacity: 0;
+  transform: translateY(-16px);
+  transition: opacity .35s ease, transform .35s ease;
+}
+
+.menu-panel.open .menu-content{
+  opacity: 1;
+  transform: translateY(0);
+  /* precisa ser IGUAL ou MAIOR que a duração da transição do .menu-panel (.55s)
+     — se o conteúdo (fotos rotacionadas) começar a aparecer enquanto o painel
+     ainda está descendo, a borda da tela corta as fotos em ângulo reto e revela
+     primeiro a ponta rotacionada delas em vez da borda inteira. Esperando o
+     painel terminar, o conteúdo só aparece com a tela já 100% coberta. */
+  transition-delay: .25s;
+}
+
+/* =========================================================================
+   MENU — LINHAS ONDULADAS DE FUNDO (decorativas, atrás do .menu-content)
+   Várias linhas finas empilhadas, cada uma rolando pra um lado (técnica de
+   duas trilhas idênticas, igual ao .stack-marquee), alternando
+   as cores var(--white) / var(--lightgreen) e "respirando" em opacidade
+   com atrasos diferentes pra não ficarem todas sincronizadas.
+   ========================================================================= */
+
+.menu-waves{
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly; /* espalha do topo ao rodapé, não só no meio */
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.menu-wave{
+  display: flex;
+  width: 100%;
+  overflow: hidden;
+  animation:
+    menuWaveFade 7s ease-in-out infinite var(--wave-fade-delay, 0s),
+    menuWaveBob var(--wave-bob-duration, 4s) ease-in-out infinite var(--wave-bob-delay, 0s);
+}
+
+.menu-wave-track{
+  display: flex;
+  flex-shrink: 0;
+  width: 100%;
+}
+
+.menu-wave--right .menu-wave-track{
+  animation-name: menuWaveScrollRight;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-duration: var(--wave-scroll-duration, 22s);
+}
+
+.menu-wave--left .menu-wave-track{
+  animation-name: menuWaveScrollLeft;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-duration: var(--wave-scroll-duration, 22s);
+}
+
+@keyframes menuWaveScrollLeft{
+  0%   { transform: translateX(0%); }
+  100% { transform: translateX(-100%); }
+}
+
+@keyframes menuWaveScrollRight{
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(0%); }
+}
+
+@keyframes menuWaveFade{
+  0%, 100%{ opacity: .12; }
+  50%{ opacity: .55; }
+}
+
+/* balanço vertical suave — uma sobe, outra desce, em velocidades e
+   atrasos diferentes (definidos por linha via --wave-bob-*), pra dar a
+   sensação de várias ondas de verdade se movendo, não só linhas
+   deslizando de lado */
+@keyframes menuWaveBob{
+  0%, 100%{ transform: translateY(-7px); }
+  50%{ transform: translateY(7px); }
+}
+
+.menu-wave-svg{
+  width: 100%;
+  height: 26px;
+  display: block;
+  flex-shrink: 0;
+}
+
+.menu-wave-svg path{
+  fill: none;
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+}
+
+.menu-wave--white .menu-wave-svg path{ stroke: var(--white); }
+.menu-wave--lightgreen .menu-wave-svg path{ stroke: var(--lightgreen); }
+
+/* PAUSA COM O MENU FECHADO — o maior ganho de performance do site inteiro.
+   São 16 linhas, cada uma com 2 animações infinitas (fade + bob), mais 32
+   trilhas com a animação de deslize: ~64 animações rodando SEM PARAR desde o
+   carregamento da página, compondo camadas atrás de um overlay que na maior
+   parte do tempo está fechado. O navegador não tem como adivinhar que
+   ninguém está vendo.
+
+   Duas sutilezas nesta regra:
+   · ela precisa vir DEPOIS de .menu-wave / .menu-wave-track. A propriedade
+     `animation` é atalho, e todo atalho reseta o que não foi citado — ou
+     seja, aquelas declarações voltam animation-play-state pra `running`.
+     Com a mesma especificidade, quem vem por último vence;
+   · o seletor usa :not(.open) no painel (0,3,0) em vez de depender só da
+     ordem, pra sobreviver a qualquer reordenação futura do arquivo. */
+.menu-panel:not(.open) .menu-waves,
+.menu-panel:not(.open) .menu-waves *{
+  animation-play-state: paused;
+}
+
+@media (max-width: 600px){
+  .menu-waves{ gap: 22px; }
+  .menu-wave-svg{ height: 18px; }
+}
+
+.menu-photos{
+  display: flex;
+  gap: 20px;
+  flex-shrink: 0;
+}
+
+.menu-photo-col{
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+
+.menu-photo-col.offset{
+  margin-top: 90px;
+}
+
+.menu-photos img{
+  width: 260px;
+  height: 330px;
+  object-fit: cover;
+  border-radius: 2%;
+  box-shadow: 0 25px 45px rgba(0,0,0,0.7);
+  transform: rotate(var(--rot, 0deg));
+  display: block;
+  filter: grayscale(1) sepia(0.12) hue-rotate(65deg) saturate(1.3) brightness(1);
+  transition: filter .4s ease;
+}
+
+.menu-photos img:hover{
+  filter: grayscale(0) contrast(1.05);
+}
+
+/* will-change força o navegador a manter uma camada de GPU dedicada. Nas 8
+   fotos (260x330 cada) isso ficava reservado a página inteira, mesmo com o
+   menu fechado o tempo todo — memória de vídeo parada. Só vale a pena
+   enquanto o menu está aberto e elas realmente se movem. */
+.menu-panel.open .menu-photos img{
+  will-change: transform, filter;
+}
+
+/* ---------- Wrapper: links + card de redes sociais, empilhados ---------- */
+
+/* O texto dos links NÃO encosta na borda direita do próprio elemento: o
+   .text-reveal tem `padding: 0.15em 0.4em` (o respiro que a animação de
+   revelar precisa pra não cortar as letras). Com a fonte em 89.6px isso dá
+   quase 36px de recuo invisível.
+   O divisor e o card de contato, alinhados à borda da CAIXA, ficavam então
+   36px mais à direita que o texto que o olho usa de referência — daí a
+   sensação de estarem deslocados. Recuando os dois pelo mesmo valor, tudo
+   passa a alinhar pela lateral do texto de verdade. */
+.menu-right{
+  --recuo-link: calc(clamp(24px, 7vw, 6rem) * 0.4);
+
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 34px;
+}
+
+.menu-social-card{
+  margin-right: var(--recuo-link);
+}
+
+
+.menu-links{
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: end;
+  gap: 22px;
+}
+
+.menu-links a{
+  color: var(--white);
+  text-decoration: none;
+  font-size: clamp(24px, 7vw, 6rem);
+  font-weight: 700;
+  transition: color .25s ease;
+}
+
+.menu-links a:hover{
+  color: var(--lightgreen);
+}
+
+/* =========================================================================
+   MENU — CARD DE REDES SOCIAIS (abaixo dos links do menu)
+   ========================================================================= */
+
+/* recuado pelo mesmo tanto que o card, pra encostar na lateral do TEXTO dos
+   links e não na borda da caixa deles (ver .menu-right). A largura encolhe
+   junto: só a margem empurraria a caixa pra fora do container pela esquerda.
+   Esta declaração precisa morar AQUI, no bloco original — declarada antes,
+   ela perdia pro `margin: 0` que ficava logo abaixo. */
+.menu-divider{
+  width: calc(100% - var(--recuo-link));
+  max-width: 340px;
+  border: none;
+  border-top: 1px solid rgba(241, 236, 225, 0.25);
+  margin: 0 var(--recuo-link) 0 0;
+}
+
+.menu-social-card{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  width: fit-content;
+  height: fit-content;
+  padding: 0;
+  background-color: transparent;
+  box-shadow: none;
+}
+
+.ms-icon{
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background-color: rgb(44, 44, 44);
+  text-decoration: none;
+  transition: background-color .3s, transform .3s, border-radius .3s;
+}
+
+.ms-icon i{
+  font-size: 21px;
+  color: #fff;
+  transition: color .3s;
+}
+
+.ms-icon:hover{
+  transform: scale(1.4);
+  border-radius: 13px;
+}
+
+.ms-icon:active{
+  transform: scale(0.9);
+  transition-duration: .3s;
+}
+
+.ms-instagram:hover{ background-color: var(--lightgreen); }
+.ms-linkedin:hover{ background-color: var(--lightgreen); }
+.ms-github:hover{ background-color: var(--lightgreen); }
+.ms-email:hover{ background-color: var(--lightgreen); }
+.ms-instagram:hover i{ color: var(--bg); }
+.ms-linkedin:hover i{ color: var(--bg); }
+.ms-github:hover i{ color: var(--bg); }
+.ms-email:hover i{ color: var(--bg); }
+
+.ms-icon:hover i{
+  animation: msSlideInTop .3s both;
+}
+
+@keyframes msSlideInTop{
+  0%{
+    transform: translateY(50px);
+    opacity: 0;
+  }
+  100%{
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 900px){
+  .menu-right{ align-items: center; }
+  .menu-divider{ max-width: 260px; }
+  .menu-social-card{ gap: 14px; }
+  .ms-icon{ width: 48px; height: 48px; }
+  .ms-icon i{ font-size: 17px; }
+}
+
+/* =========================================================================
+   EFEITO "TEXT REVEAL" (usado nos links do menu)
+   ========================================================================= */
+
+.text-reveal{
+  --tr-duration: 250ms;
+  --tr-easing: ease-in-out;
+  --tr-stagger: 25ms;
+  --tr-color: inherit;
+  --tr-hover-color: #b2c73a;
+
+  display: inline-block;
+  position: relative;
+  text-decoration: none;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  padding: 0.15em 0.4em;
+  overflow: hidden;
+  cursor: pointer;
+  user-select: none;
+  color: var(--tr-color);
+  transition: color .35s ease;
+}
+
+.text-reveal:hover{
+  color: var(--tr-hover-color);
+}
+
+.text-reveal .tr-track{
+  display: inline-flex;
+  overflow: hidden;
+  position: relative;
+  height: 1em;
+}
+
+.text-reveal .tr-char{
+  display: inline-block;
+  position: relative;
+  will-change: transform;
+  transition: transform var(--tr-duration) var(--tr-easing);
+  transition-delay: calc(var(--tr-i) * var(--tr-stagger));
+}
+
+/* direção "up" (padrão): cópia-fantasma aparece embaixo */
+.text-reveal[data-direction="up"] .tr-char{
+  text-shadow: 0 1em currentColor;
+}
+.text-reveal[data-direction="up"]:hover .tr-char{
+  transform: translateY(-1em);
+}
+
+/* direção "down": cópia-fantasma aparece em cima */
+.text-reveal[data-direction="down"] .tr-char{
+  text-shadow: 0 -1em currentColor;
+}
+.text-reveal[data-direction="down"]:hover .tr-char{
+  transform: translateY(1em);
+}
+
+/* =========================================================================
+   "I ANIMATE." — letras animáveis por clique
+   O texto é quebrado em <span> (um por letra) pra cada um poder rodar sua
+   própria animação. Precisa herdar o mesmo tamanho/peso de .texto h1 pra
+   ficar do mesmo tamanho e espaçamento de "DESIGN." e "DEVELOP.".
+   ========================================================================= */
+
+.word{
+  display: inline-flex; /* remove o espaço "fantasma" entre os <span>, causado pelas quebras de linha no HTML */
+  align-items: flex-end;
+  font-family: 'JetBrains Mono', monospace;
+  perspective: 1000px;
+}
+
+.word span{
+  cursor: pointer;
+  display: inline-block;
+  font-size: inherit; /* herda o clamp() de .texto h1 — mesmo tamanho de DESIGN. e DEVELOP. */
+  line-height: inherit;
+  user-select: none;
+}
+
+.word span:nth-child(1).active{
+  animation: balance 1.5s ease-out;
+  transform-origin: bottom left;
+}
+
+@keyframes balance{
+  0%, 100% { transform: rotate(0deg); }
+  30%, 60% { transform: rotate(-45deg); }
+}
+
+.word span:nth-child(2).active{
+  animation: shrinkjump 1s ease-in-out;
+  transform-origin: bottom center;
+}
+
+@keyframes shrinkjump{
+  10%, 35% { transform: scale(2, .2) translate(0, 0); }
+  45%, 50% { transform: scale(1) translate(0, -150px); }
+  80%      { transform: scale(1) translate(0, 0); }
+}
+
+.word span:nth-child(3).active{
+  animation: falling 2s ease-out;
+  transform-origin: bottom center;
+}
+
+@keyframes falling{
+  12%      { transform: rotateX(240deg); }
+  24%      { transform: rotateX(150deg); }
+  36%      { transform: rotateX(200deg); }
+  48%      { transform: rotateX(175deg); }
+  60%, 85% { transform: rotateX(180deg); }
+  100%     { transform: rotateX(0deg); }
+}
+
+.word span:nth-child(4).active{
+  animation: bounce 1.2s ease-out;
+  transform-origin: bottom center;
+}
+
+@keyframes bounce{
+  0%   { transform: translateY(0) scaleY(1); }
+  20%  { transform: translateY(-130px) scaleY(1); }
+  40%  { transform: translateY(0) scaleY(0.65); }
+  55%  { transform: translateY(-45px) scaleY(1.1); }
+  70%  { transform: translateY(0) scaleY(0.85); }
+  85%  { transform: translateY(-12px) scaleY(1.05); }
+  100% { transform: translateY(0) scaleY(1); }
+}
+
+.word span:nth-child(5).active{
+  animation: toplong 1.5s linear;
+}
+
+@keyframes toplong{
+  10%, 40% { transform: translateY(-48vh) scaleY(1); }
+  90%      { transform: translateY(-48vh) scaleY(4); }
+}
+
+.word span:nth-child(6).active{
+  animation: wiggle 1s ease-in-out;
+  transform-origin: bottom center;
+}
+
+@keyframes wiggle{
+  0%, 100% { transform: rotate(0deg); }
+  15%      { transform: rotate(-16deg); }
+  30%      { transform: rotate(13deg); }
+  45%      { transform: rotate(-10deg); }
+  60%      { transform: rotate(7deg); }
+  75%      { transform: rotate(-4deg); }
+}
+
+.word span:nth-child(7).active{
+  animation: rotate 1s ease-out;
+}
+
+@keyframes rotate{
+  20%, 80% { transform: rotateY(180deg); }
+  100%     { transform: rotateY(360deg); }
+}
+
+/* o "." era a única letra sem animação. Como o JS tira a classe .active no
+   evento animationend, e sem @keyframes esse evento nunca dispara, o ponto
+   ficava com a classe presa pra sempre — e não reagia a mais nenhum clique. */
+.word span:nth-child(8).active{
+  animation: dotdrop 1s cubic-bezier(.34, 1.56, .64, 1);
+  transform-origin: bottom center;
+}
+
+@keyframes dotdrop{
+  0%   { transform: translateY(0) scale(1); }
+  30%  { transform: translateY(-80px) scale(1.35); }
+  60%  { transform: translateY(0) scale(1.25, .75); }
+  80%  { transform: translateY(-16px) scale(1); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+/* =========================================================================
+   CONTATO
+   ========================================================================= */
+
+.contato{
+  background: var(--bg);
+  min-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 70px;
+  padding: 100px 7vw 40px;
+}
+
+.contato-grid{
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 60px;
+  align-items: center;
+  width: 100%;
+}
+
+/* ---------- Bio animada ---------- */
+
+.bio-animada{
+  text-align: left;
+}
+
+/* =========================================================================
+   RETRATO RECORTADO (acima do texto "Sobre mim")
+
+   O recorte é PNG sem fundo sobre uma seção preta, e a tentação é só soltar
+   ele ali. O problema de fazer isso é que a foto termina onde o moletom
+   termina — num corte reto no meio do nada, que denuncia o recorte e faz a
+   imagem parecer colada por cima do texto.
+
+   Duas coisas costuram a foto ao bloco:
+
+   · a MÁSCARA em degradê dissolve a base dele no preto da seção, então não
+     existe borda inferior nenhuma — ele nasce do próprio fundo;
+   · a SOMBRA tem a forma do corpo. Aqui já esteve um degradê radial, e o
+     problema dele era exatamente esse: círculo nenhum tem a ver com a
+     silhueta de uma pessoa, então lia como uma bola de luz. Agora é
+     `drop-shadow`, que no CSS não desenha um retângulo — ele segue o CANAL
+     ALFA da imagem. Como o PNG é recortado, a sombra sai no formato dos
+     ombros, da cabeça e dos braços cruzados.
+
+     O que separa sombra de borrão é o RAIO. Na primeira versão eu usei 38px
+     de desfoque com pouco deslocamento: espalhado demais, o contorno se
+     desmancha e o que sobra é uma mancha luminosa em volta. Sombra de
+     verdade é deslocada e razoavelmente nítida — dá pra reconhecer a
+     silhueta nela. Por isso o raio caiu para menos da metade e o
+     deslocamento cresceu.
+
+     Ela vive no <figure>, e não na <img>, de propósito: o navegador aplica
+     filtro ANTES da máscara. Na imagem, a máscara cortaria a própria sombra
+     pela base. No pai, o filtro age sobre o resultado já mascarado, então a
+     sombra também se dissolve embaixo, junto com ele.
+
+     Numa seção quase preta, sombra escura não aparece — por isso ela é
+     clara e esverdeada, deslocada como quem projeta numa parede atrás.
+
+   A cor da foto ficou cheia. Cheguei a pôr nela o véu esverdeado das fotos
+   do menu, mas ela é o único retrato de rosto do site e pedia cor de
+   verdade; quem amarra ela ao resto é a luz atrás, não uma camada por cima.
+
+   A margem negativa embaixo é de propósito: o rótulo sobe e começa
+   exatamente onde a foto já se dissolveu.
+   ========================================================================= */
+
+.bio-retrato{
+  position: relative;
+  /* o piso é generoso de propósito: 23vw num celular daria uns 90px, e aí o
+     rosto some. Metade da largura da tela é o mínimo pra ele ter presença */
+  width: clamp(200px, 23vw, 290px);
+
+  /* o bloco inteiro (foto + rótulo + texto) sobe um tanto: centrado na linha
+     do grid ele ficava baixo demais em relação à coluna da direita */
+  margin: clamp(-64px, -3.6vw, -26px) 0 -14px;
+  line-height: 0;                 /* tira o espaço fantasma embaixo da img */
+
+  filter:
+    /* a projetada: deslocada e com raio curto, pra dar pra ver que é o
+       contorno de uma pessoa e não um brilho espalhado 
+    drop-shadow(26px 18px 12px rgba(217, 255, 0, .22))
+    /* um segundo passe, mais aberto e bem fraco, só pra sombra não terminar
+       num corte duro — é o que uma penumbra faz 
+    drop-shadow(30px 22px 26px rgba(217, 255, 0, .10));*/
+}
+
+.bio-retrato img{
+  position: relative;             /* acima do halo */
+  display: block;
+  width: 100%;
+  height: auto;
+
+  /* a base some no fundo — sem isso o recorte acaba num corte reto */
+  -webkit-mask-image: linear-gradient(180deg,
+    #000 0%, #000 66%, rgba(0, 0, 0, .55) 84%, transparent 99%);
+  mask-image: linear-gradient(180deg,
+    #000 0%, #000 66%, rgba(0, 0, 0, .55) 84%, transparent 99%);
+
+  /* cor cheia. O único ajuste é um empurrãozinho de contraste e saturação,
+     porque o moletom é branco sobre preto e sem isso ele lava */
+  filter: saturate(1.06) contrast(1.04);
+  transition: filter .45s ease;
+}
+
+@media (hover: hover) and (pointer: fine){
+  .bio-retrato:hover img{ filter: saturate(1.12) contrast(1.06) brightness(1.05); }
+}
+
+/* A entrada acompanha o scroll, igual ao texto logo abaixo: a mesma técnica
+   de animação pausada com atraso negativo. Ela fecha em --prog .45 — bem
+   antes do parágrafo — porque a foto vem primeiro na leitura.
+
+   Só anima sob .retrato-scrub, classe que o JS põe. Sem script, sem classe,
+   e a foto simplesmente aparece: nada aqui esconde conteúdo sozinho. */
+.bio-animada.retrato-scrub .bio-retrato img{
+  /* A curva importa mais aqui do que numa animação normal. Com um ease-out
+     comum, medi a foto já 89% erguida com só 15% do percurso rolado: o
+     movimento acabava antes de a pessoa perceber que ele existia. Esta curva
+     começa devagar e distribui a subida ao longo do caminho, que é o ponto de
+     uma animação comandada pelo scroll — ela tem que durar o scroll. */
+  animation: retratoEntra .55s cubic-bezier(.45, .06, .4, 1) both paused;
+  animation-delay: calc(var(--prog, 0) * -1s);
+}
+
+/* Ela SOBE para dentro do lugar. Antes eram 26px com um leve zoom, e isso não
+   lia como subir: lia como aparecer. O zoom saiu (encolher e crescer é outro
+   gesto, e disputava com o movimento) e o percurso subiu para 78px, que numa
+   foto de ~430px de altura é o bastante para o olho acompanhar a viagem. */
+@keyframes retratoEntra{
+  from{ opacity: 0; transform: translateY(78px); }
+  to  { opacity: 1; transform: translateY(0);    }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .bio-animada.retrato-scrub .bio-retrato img{ animation: none; }
+}
+
+.contato-label{
+  display: block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--lightgreen);
+  margin-bottom: 18px;
+}
+
+.bio-texto{
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(16px, 1.6vw, 22px);
+  line-height: 1.75;
+  color: var(--white);
+  margin: 0;
+  max-width: 640px;
+}
+
+/* O desfoque sai palavra a palavra CONFORME SE ROLA, não de uma vez quando o
+   parágrafo entra na tela. Quem manda é o --prog, escrito pelo js/script.js a
+   partir da posição vertical do bloco, e a animação fica pausada num ponto
+   escolhido por um `animation-delay` negativo — mesma técnica do jardim.
+
+   O estado de repouso é TEXTO NORMAL: só quem tem a classe `bio-scrub` (posta
+   pelo JS) é escondido. Assim, se o script não rodar, o parágrafo continua
+   legível em vez de ficar invisível esperando. */
+.bio-texto .bio-word{
+  display: inline-block;
+}
+
+.bio-texto.bio-scrub .bio-word{
+  animation-name: bioPalavra;
+  animation-duration: .22s;
+  animation-timing-function: ease;
+  animation-fill-mode: both;
+  animation-play-state: paused;
+  /* --bw-i é o número da palavra e --bw-passo é a distância entre uma e a
+     seguinte. O passo era fixo em .012, calibrado no olho para "umas 45
+     palavras" — e com ele a última só terminava lá pelos 75% do percurso.
+     Como esta é a ÚLTIMA seção da página, esses 25% finais não existem: o
+     scroll acaba antes e as últimas palavras ficavam borradas para sempre.
+
+     Agora o passo vem do JS, calculado a partir da contagem real de palavras
+     para que a última feche exatamente em --prog 1. Mexer no texto não
+     desregula mais nada. */
+  animation-delay: calc((var(--bw-i) * var(--bw-passo, .012) - var(--prog, 0)) * 1s);
+}
+
+@keyframes bioPalavra{
+  from{ opacity: 0; transform: translateY(14px); filter: blur(6px); }
+  to  { opacity: 1; transform: translateY(0);    filter: blur(0); }
+}
+
+/* ---------- Ações (redes + currículo) ---------- */
+
+.contato-actions{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+}
+
+/* ---------- Redes sociais — cubo giratório ---------- */
+
+.social-row{
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* a largura do cubo e a das duas faces PRECISAM ser a mesma, senão a face de
+   cima (que gira pra frente no hover) fica desalinhada com a da frente. Antes
+   eram dois números soltos — e no mobile tinham divergido feio (cubo 490px,
+   faces 190px), estourando a largura da tela. Uma variável só resolve. */
+.button-icon{
+  /* 260px era pouco: medido, o e-mail "fernandomarquecruz@gmail.com" precisa
+     de 269px de texto e transbordava 9px pra fora da caixa; o LinkedIn ficava
+     a 29px do limite. Com 330px e o respiro lateral das faces, o mais longo
+     sobra com folga. */
+  --cube-w: 330px;
+
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  height: 62px;
+  border: 3px solid var(--white);
+  width: fit-content;
+  max-width: 100%;
+  cursor: pointer;
+  text-decoration: none;
+  transition: border-color .3s ease;
+}
+
+.button-icon .icon{
+  height: 100%;
+  background-color: var(--white);
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.button-icon .icon i{
+  font-size: 34px;
+  color: var(--bg);
+}
+
+.button-icon .cube{
+  transition: all 0.4s;
+  transform-style: preserve-3d;
+  width: var(--cube-w);
+  height: 100%;
+  position: relative;
+}
+
+.button-icon:hover{
+  border-color: var(--lightgreen);
+}
+
+.button-icon:hover .cube{
+  transform: rotateX(90deg);
+}
+
+.button-icon .side{
+  position: absolute;
+  height: 100%;
+  width: var(--cube-w);
+  padding: 0 16px;          /* o texto nunca encosta na borda da caixa */
+  display: flex;
+  font-size: 1em;
+  justify-content: center;
+  align-items: center;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.button-icon .top{
+  background: var(--lightgreen);
+  color: var(--bg);
+  transform: rotateX(-90deg) translate3d(0, 0px, 2.5em);
+}
+
+.button-icon .front{
+  background: var(--bg);
+  color: var(--white);
+  transform: translate3d(0, 0, 1em);
+}
+
+/* ---------- Botão currículo ---------- */
+
+.cv-button{
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 20rem;
+  height: 4.25rem;
+  cursor: pointer;
+  text-decoration: none;
+  margin: 0 auto;
+}
+
+.cv-button .circle{
+  transition: all .45s cubic-bezier(.65,0,.076,1);
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 4.25rem;
+  height: 4.25rem;
+  flex-shrink: 0;
+  background: var(--lightgreen);
+  border-radius: 2.25rem;
+}
+
+.cv-button .circle .icon{
+  transition: all .45s cubic-bezier(.65,0,.076,1);
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  margin: auto;
+  background: var(--bg);
+}
+
+.cv-button .circle .icon.arrow{
+  transition: all .45s cubic-bezier(.65,0,.076,1);
+  left: .9rem;
+  width: 1.4rem;
+  height: .17rem;
+  background: none;
+}
+
+.cv-button .circle .icon.arrow::before{
+  position: absolute;
+  content: "";
+  top: -.38rem;
+  right: .05rem;
+  width: .78rem;
+  height: .78rem;
+  border-top: .17rem solid var(--bg);
+  border-right: .17rem solid var(--bg);
+  transform: rotate(45deg);
+}
+
+.cv-button .button-text{
+  transition: color .45s cubic-bezier(.65,0,.076,1);
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  padding-left: 6rem;
+  color: var(--white);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.cv-button:hover .circle{
+  width: 100%;
+}
+
+.cv-button:hover .circle .icon.arrow{
+  background: var(--bg);
+  transform: translate(1rem, 0);
+}
+
+.cv-button:hover .button-text{
+  color: var(--bg);
+}
+
+@media (max-width: 900px){
+  .contato{ padding: 80px 6vw 40px; }
+  .contato-grid{ grid-template-columns: 1fr; gap: 56px; }
+  .contato-actions{ align-items: flex-start; }
+  .cv-button{ margin: 0; }
+}
+
+@media (max-width: 600px){
+  .button-icon{ height: 52px; --cube-w: min(250px, 60vw); }
+  .button-icon .side{ font-size: .72em; padding: 0 6px; text-align: center; }
+  /* o e-mail é longo demais pra caber inteiro numa face estreita */
+  .button-icon .top{
+    transform: rotateX(-90deg) translate3d(0, 26px, 1.6em);
+    overflow-wrap: anywhere;
+    line-height: 1.2;
+  }
+  .cv-button{ width: 100%; max-width: 20rem; }
+}
+
+/* =========================================================================
+   TELAS PEQUENAS — passada geral
+
+   Este bloco fica no FIM do arquivo de propósito. As regras de celular
+   espalhadas pelas seções acima continuam valendo; o que está aqui vem
+   depois e ganha delas quando precisa corrigir alguma. Quem for mexer:
+   procure primeiro aqui.
+
+   Três medidas mandam no layout estreito, e elas moram no :root logo abaixo
+   pra não haver dois números diferentes dizendo a mesma coisa.
+   ========================================================================= */
+
+@media (max-width: 900px){
+  :root{
+    /* a mesma margem lateral pra todas as seções — antes cada uma tinha a sua
+       (24px aqui, 6vw ali, 7vw acolá) e as bordas não se alinhavam */
+    --gutter: clamp(20px, 6vw, 34px);
+    /* o respiro vertical entre seções, para o ritmo da página não depender de
+       quem escreveu cada bloco */
+    --respiro: clamp(56px, 11vw, 90px);
+  }
+}
+
+
+/* -------------------------------------------------------------------------
+   1. MENU — o conserto mais importante desta passada
+
+   O menu estava QUEBRADO no celular, não apertado: quebrado. O
+   .menu-content é uma linha (fotos | links) e a parede de fotos tem 540px
+   fixos que não encolhem. Numa tela de 390px ela sozinha já estoura, e
+   empurrava a coluna dos links pra fora — medi os links começando em 650px
+   numa tela de 390. Ou seja: dava pra abrir o menu e não havia como navegar.
+
+   No estreito o menu vira uma coluna centrada. A parede de fotos sai de
+   cena: são oito imagens de 260x330 que, encolhidas o bastante pra caber,
+   não seriam mais do que selos ilegíveis roubando a tela dos links. As
+   linhas onduladas do fundo continuam ali e seguram o clima.
+   ------------------------------------------------------------------------- */
+
+@media (max-width: 900px){
+  .menu-content{
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: clamp(28px, 6vh, 52px);
+    padding: 96px var(--gutter) calc(var(--gutter) + 16px);
+  }
+
+  .menu-photos{ display: none; }
+
+  .menu-right{
+    --recuo-link: 0px;          /* sem texto à direita, não há o que compensar */
+    align-items: center;
+    width: 100%;
+    gap: clamp(22px, 4vh, 34px);
+  }
+
+  .menu-links{
+    align-items: center;
+    gap: clamp(2px, 1vh, 10px);
+    width: 100%;
+  }
+
+  /* O padding não é enfeite: com 35px de altura o link era um alvo pequeno
+     demais pro dedo. Subindo pra 52px cada item vira um botão confortável, e
+     de quebra o texto ganha o respiro que a animação de revelar precisa. */
+  .menu-links a{
+    display: block;
+    padding: 12px 16px;
+    font-size: clamp(30px, 8.6vw, 52px);
+    line-height: 1.05;
+    text-align: center;
+  }
+
+  .menu-divider{
+    width: min(62%, 260px);
+    margin: 0 auto;
+  }
+
+  .menu-social-card{ gap: clamp(14px, 4vw, 22px); }
+  .ms-icon{ width: 52px; height: 52px; }
+  .ms-icon i{ font-size: 19px; }
+
+  /* no toque o :hover cola depois do tap e o ícone fica preso grande */
+  .ms-icon:hover{ transform: none; border-radius: 0; }
+}
+
+/* A FAIXA DO MEIO — tablet e notebook pequeno.
+
+   Passar de 900px não resolve sozinho: medi o menu numa tela de 945 e os
+   links terminavam em 1013, ou seja 68px fora. A parede de fotos tem 540px
+   fixos e os links chegam a 67px de corpo; somados, não cabem.
+
+   Aqui a linha continua (as fotos são metade da graça do menu), mas as duas
+   coisas encolhem até caber de verdade. Só abaixo de 900 é que as fotos saem
+   de cena — daí pra baixo elas não seriam mais do que selos. */
+@media (min-width: 901px) and (max-width: 1180px){
+  .menu-content{ gap: 26px; padding: 0 4vw; }
+
+  .menu-photos{ gap: 14px; }
+  .menu-photo-col{ gap: 18px; }
+  .menu-photo-col.offset{ margin-top: 60px; }
+
+  .menu-photos img{
+    width: clamp(118px, 17vw, 190px);
+    height: clamp(150px, 21.5vw, 240px);
+  }
+
+  .menu-links a{ font-size: clamp(30px, 5.2vw, 60px); }
+  .menu-links{ gap: 14px; }
+}
+
+/* de pé em tela curta (celular deitado, telinha antiga) o menu não cabe
+   centrado: vira rolagem, senão os links de baixo ficam inalcançáveis */
+@media (max-width: 900px) and (max-height: 620px){
+  .menu-content{
+    justify-content: flex-start;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .menu-links a{ font-size: clamp(26px, 7vw, 38px); padding: 8px 14px; }
+}
+
+
+/* -------------------------------------------------------------------------
+   2. HERO — devolvendo espaço ao texto
+
+   A assinatura é `flex: 1 1 auto`, então ela come tudo que sobra. No
+   desktop isso é ótimo. No celular medi a caixa dela com 671px de 844 — 79%
+   da tela — e como o traço é largo e a caixa virou um retângulo em pé, a
+   assinatura era desenhada pequena no meio de um vazio enorme.
+
+   Aqui ela passa a ter altura própria e o que sobra se reparte em volta:
+   o rótulo em cima, a assinatura no meio, o texto que se escreve embaixo.
+   ------------------------------------------------------------------------- */
+
+@media (max-width: 600px){
+  .nome{
+    margin: 24px 0 0 var(--gutter);
+    font-size: clamp(11px, 3.1vw, 13px);
+    letter-spacing: .06em;
+  }
+
+  .assinatura-wrap{
+    flex: 0 0 auto;
+    height: clamp(170px, 33vh, 300px);
+    min-height: 0;
+    margin: auto 0;             /* centra no espaço que sobrou */
+    padding: 0 var(--gutter);
+  }
+
+  .overlay{ padding: 0 var(--gutter) 7vh; }
+}
+
+
+/* -------------------------------------------------------------------------
+   3. SOBRE — o trilho horizontal
+
+   No celular o pin dá lugar a rolagem horizontal nativa (regra lá em cima).
+   Funciona, mas nada na tela conta isso. A dica embaixo do primeiro painel
+   resolve, e some sozinha assim que a pessoa arrasta — quem já entendeu não
+   fica com um aviso pendurado na tela.
+   ------------------------------------------------------------------------- */
+
+@media (max-width: 768px){
+  .hs-outer{ position: relative; }
+
+  .hs-outer::after{
+    content: 'arraste  →';
+    position: absolute;
+    left: 50%;
+    bottom: 22px;
+    transform: translateX(-50%);
+    padding: 7px 15px;
+    border: 1px solid rgba(241, 236, 225, .28);
+    border-radius: 999px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: rgba(241, 236, 225, .6);
+    pointer-events: none;
+    animation: dicaArraste 2.4s ease-in-out infinite;
+    transition: opacity .4s ease;
+  }
+
+  .hs-outer.ja-arrastou::after{ opacity: 0; }
+
+  @keyframes dicaArraste{
+    0%, 100%{ transform: translateX(-50%); }
+    50%     { transform: translateX(calc(-50% + 7px)); }
+  }
+
+  .texto{ margin-left: var(--gutter); }
+  .hs-panel--mid .texto{ margin-left: var(--gutter); }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .hs-outer::after{ animation: none; }
+}
+
+
+/* -------------------------------------------------------------------------
+   4. PROJETOS, STACK E CONTATO — acerto de escala e de respiro
+   ------------------------------------------------------------------------- */
+
+@media (max-width: 600px){
+  /* projetos era o único fora do compasso: 60px em cima e 100 embaixo, contra
+     os 56 de todo o resto. Num celular essa diferença aparece — a página
+     "respira" fundo em um lugar só */
+  .projetos{ padding-top: var(--respiro); padding-bottom: var(--respiro); }
+  .portfolio-gallery{
+    padding: 0 var(--gutter);
+    min-height: 0;
+  }
+
+  /* o nome do projeto é a informação principal da linha e estava do tamanho
+     de um parágrafo comum */
+  .pj-nome{ font-size: clamp(21px, 5.6vw, 26px); }
+  .pj-num,
+  .pj-tipo{ font-size: 12px; }
+
+  .stack-section{ padding: var(--respiro) 0; }
+  .stack-item{ font-size: 11px; }
+
+  /* 8px era pequeno demais pra ler de longe num celular */
+  .idioma-nivel{ font-size: 10px; padding: 5px 11px 4px; }
+  .idioma-txt strong{ font-size: clamp(13px, 3.8vw, 16px); }
+
+  .contato{ padding: var(--respiro) var(--gutter) 32px; gap: clamp(40px, 9vw, 70px); }
+
+  /* linha de rodapé: era do mesmo tamanho do texto da bio e competia com ele */
+  .direitos{
+    font-size: 12px;
+    line-height: 1.5;
+    text-align: center;
+  }
+}
+
+
+/* -------------------------------------------------------------------------
+   5. O PISO — telas bem estreitas (360px pra baixo)
+   Aqui não é questão de estética: é caber.
+   ------------------------------------------------------------------------- */
+
+@media (max-width: 360px){
+  .menu-links a{ font-size: clamp(26px, 8vw, 34px); }
+  .ms-icon{ width: 46px; height: 46px; }
+  .ms-icon i{ font-size: 17px; }
+  .idioma{ --comp: clamp(84px, 25vw, 120px); --recuo: 24px; }
+  .button-icon{ --cube-w: min(210px, 58vw); }
+}
