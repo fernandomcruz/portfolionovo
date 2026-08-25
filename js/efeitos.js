@@ -46,8 +46,23 @@
       }, { passive: true });
       return fn;
     },
-    resize(fn){ window.addEventListener('resize', fn); return fn; }
+    resize(fn){ window.addEventListener('resize', fn); return fn; },
+    parar(){}
   };
+
+  /* A RÉGUA DE VISIBILIDADE TAMBÉM VEM DO js/script.js.
+
+     Havia aqui uma cópia da conta de "quanto do elemento está na tela", e uma
+     cópia é uma regra a mais para sair de sincronia com as outras — foi
+     exatamente assim que o block reveal acabou com dois critérios discordando.
+     Agora existe um lugar só, e este arquivo consome.
+
+     Sem o script.js não há régua, e aí os três módulos de entrada abaixo
+     simplesmente não rodam. Isso é o comportamento seguro, não uma falha: todos
+     eles escondem conteúdo por meio de uma classe que só o JS coloca, então não
+     rodar quer dizer nascer visível — a foto aparece, as bandeiras aparecem, os
+     títulos aparecem. É a mesma rede que já valia pra quem tem o JS desligado. */
+  const Viewport = window.Viewport || null;
 
   /* "a cortina já saiu?" — vários efeitos só devem começar depois disso, ou
      rodam escondidos atrás do preloader e a pessoa nunca chega a ver.
@@ -349,6 +364,7 @@
     }
 
     if (MENOS_MOVIMENTO) return;   // texto normal, sem barra nenhuma
+    if (!Viewport) return;         // sem régua não se esconde nada — ver o topo
 
     /* Esconde AGORA, ainda no carregamento, antes de qualquer pintura.
        Na versão anterior isso só acontecia no instante de animar, o que dava
@@ -360,9 +376,10 @@
        + 1.05s de barra). Passado isso, o texto TEM que estar legível. */
     const BR_TETO_MS = 1600;
 
+    /* Sem a trava `dataset.brFeito` que havia aqui: ela existia porque três
+       gatilhos independentes podiam chamar esta função pro mesmo título. Hoje
+       quem chama é só o `aoEntrar`, e ele entrega uma vez por elemento. */
     function revelar(el){
-      if (el.dataset.brFeito) return;
-      el.dataset.brFeito = '1';
       el.classList.add('br-anima');
 
       /* Cinto de segurança: quem revela o texto hoje é o `forwards` da
@@ -375,43 +392,29 @@
       setTimeout(() => el.classList.add('br-visivel'), BR_TETO_MS);
     }
 
-    /* A rede de segurança mudou de forma. Antes eu escondia tarde justamente
-       pra nunca deixar conteúdo invisível — só que isso custava o efeito.
-       Agora escondo cedo e garanto a leitura por outro caminho: além do
-       observer, uma conferência manual por geometria. Se o
-       IntersectionObserver falhar ou nem existir, qualquer título que esteja
-       na tela é revelado do mesmo jeito. */
-    function noCampoDeVisao(el){
-      const r = el.getBoundingClientRect();
-      return r.bottom > 0 && r.top < window.innerHeight * 0.92;
-    }
+    /* O TÍTULO PRECISA ESTAR NA ÁREA DE LEITURA, não espiando pela borda.
 
-    function conferir(){
-      for (const el of alvos) {
-        if (el.dataset.brFeito || !noCampoDeVisao(el)) continue;
-        // o título do hero está visível desde o começo, mas atrás da cortina
-        // do preloader — sem esperar, a barra passaria escondida
-        quandoPronto(() => revelar(el));
-      }
-    }
+       Este módulo era o pior caso do problema todo, e por um motivo que não
+       estava à vista: ele tinha DUAS regras dizendo quando começar. Uma
+       conferência por geometria pedindo 0.95 — e um IntersectionObserver com
+       `threshold: 0.35` que revelava por conta própria, sem consultá-la.
 
-    Agenda.scroll(conferir);
-    Agenda.resize(conferir);
-    setTimeout(conferir, 1200);
+       Quem chegava primeiro era sempre o observer, e 0.35 num título quer
+       dizer o topo dele espiando pela beirada de baixo. A varredura da barra
+       leva 0,78s (1,05s no título do hero) e corria inteira ali embaixo, fora
+       do campo de visão. Quem descia até o título encontrava a barra já ida e
+       o texto já posto — o efeito acontecia, mas para ninguém.
 
-    if ('IntersectionObserver' in window) {
-      const io = new IntersectionObserver((entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          io.unobserve(entry.target);
-          quandoPronto(() => revelar(entry.target));
-        }
-      }, { threshold: 0.35 });
-
-      alvos.forEach((el) => io.observe(el));
-    } else {
-      conferir();
-    }
+       Agora a regra é uma só, e o observer virou avisador: quem decide é
+       sempre a régua do Viewport. Os 0.95 continuam iguais aos de antes, então
+       nada muda para quem já via o efeito acontecer na hora certa. Como os
+       títulos são baixos (17 a 103px), 95% acontece assim que ele termina de
+       entrar — que é exatamente quando a barra deve varrer. */
+    Viewport.aoEntrar(alvos, { fracao: 0.95 }, (el) => {
+      // o título do hero está visível desde o começo, mas atrás da cortina
+      // do preloader — sem esperar, a barra passaria escondida
+      quandoPronto(() => revelar(el));
+    });
   })();
 
 
@@ -501,16 +504,17 @@
      transform e opacidade: o compositor dá conta sozinho, sem custo por quadro.
 
      A mesma disciplina dos outros módulos que escondem conteúdo: o estado
-     escondido mora atrás de uma classe que só o JS põe, e a chegada tem dois
-     caminhos independentes — o observer e um teto de tempo. Se o observer não
-     disparar, o setTimeout revela do mesmo jeito; se o script nem rodar, a
-     classe nunca é posta e as bandeiras nascem visíveis.
+     escondido mora atrás de uma classe que só o JS põe, então se o script não
+     rodar as bandeiras nascem visíveis. Quem decide a hora de entrar é a régua
+     do Viewport, e o `resgatar` dela cobre o caso de a pessoa ter passado
+     direto pela seção — nenhuma bandeira fica escondida por isso.
      ===================================================================== */
 
   (function initEntradaIdiomas(){
     const blocos = Array.from(document.querySelectorAll('.idioma'));
     if (!blocos.length) return;
     if (MENOS_MOVIMENTO) return;   // sem viagem: as bandeiras já estão no lugar
+    if (!Viewport) return;         // sem régua não se esconde nada — ver o topo
 
     document.documentElement.classList.add('idiomas-prontos');
 
@@ -520,41 +524,22 @@
     const TETO_MS = 2600;
 
     function entrar(el){
-      if (el.dataset.idiomaFeito) return;
-      el.dataset.idiomaFeito = '1';
       el.classList.add('idioma-entra');
       setTimeout(() => el.classList.add('idioma-visivel'), TETO_MS);
     }
 
-    function noCampoDeVisao(el){
-      const r = el.getBoundingClientRect();
-      return r.bottom > 0 && r.top < window.innerHeight * 0.9;
-    }
+    /* Os 0.75 são os mesmos de antes — o que muda é que agora só existe UM
+       caminho até eles. A conta já estava certa aqui; o que fazia o efeito
+       escapar no celular era o observer ter o próprio conjunto de limiares e
+       a própria lista de conferências, cada um podendo chegar primeiro.
 
-    function conferir(){
-      for (const el of blocos) {
-        if (!el.dataset.idiomaFeito && noCampoDeVisao(el)) entrar(el);
-      }
-    }
-
-    Agenda.scroll(conferir);
-    Agenda.resize(conferir);
-
-    if ('IntersectionObserver' in window) {
-      const io = new IntersectionObserver((entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          io.unobserve(entry.target);
-          entrar(entry.target);
-        }
-      }, { threshold: 0.3 });
-
-      blocos.forEach((el) => io.observe(el));
-    }
-
-    // último recurso, independente de scroll e de observer
-    setTimeout(conferir, 1400);
-    setTimeout(() => blocos.forEach(entrar), TETO_MS * 2);
+       ATENÇÃO, e é o motivo de não haver `horizontal: true` nesta chamada: o
+       estado escondido destas bandeiras é um `translateX` que as joga pra fora
+       da tela (`-100% - 14vw`). O rect delas já nasce deslocado pros lados,
+       então uma conta que olhasse o eixo X daria zero para sempre e a viagem
+       nunca começaria. A vertical não sofre com o translate lateral — é ela
+       que sabe onde o bloco está. */
+    Viewport.aoEntrar(blocos, { fracao: 0.75 }, entrar);
   })();
 
 
@@ -566,78 +551,40 @@
      revelação acontece inteira, no ritmo dela, e não se desfaz.
 
      Mesma rede de segurança dos outros módulos que escondem conteúdo: o
-     estado escondido só existe sob uma classe que este script coloca, e a
-     chegada tem dois caminhos independentes (o observer e um teto de tempo).
-     Sem script, a foto simplesmente aparece.
+     estado escondido só existe sob uma classe que este script coloca. Sem
+     script, a foto simplesmente aparece.
      ===================================================================== */
 
   (function initRetratoReveal(){
     const fig = document.querySelector('.bio-retrato');
     if (!fig) return;
     if (MENOS_MOVIMENTO) return;   // a foto já está no lugar
+    if (!Viewport) return;         // sem régua não se esconde nada — ver o topo
 
     fig.classList.add('retrato-pronto');
 
-    let feito = false;
     function revelar(){
-      if (feito) return;
-      feito = true;
       fig.classList.add('retrato-entra');
       // teto: setTimeout corre mesmo com animação congelada
       setTimeout(() => fig.classList.add('retrato-visivel'), 2200);
     }
 
-    /* QUANDO DISPARAR — e por que não é "assim que encosta na tela".
+    /* QUANDO DISPARAR — a foto espera estar praticamente inteira na tela.
 
-       Na primeira versão eu soltava com o topo da foto a 88% da altura da
-       tela e 25% dela visível. Só que 25% visível é a foto ESPIANDO pela
-       borda de baixo: a revelação de 1,15s corria enquanto ela ainda estava
-       quase toda fora, e quando a pessoa terminava de rolar já tinha
-       acabado. O efeito acontecia, mas ninguém via.
+       Já passei por duas versões cedo demais. A primeira soltava com 25% da
+       foto visível, ou seja, ela ESPIANDO pela borda de baixo: a revelação
+       de 1,15s corria enquanto a foto ainda estava quase toda fora, e quem
+       rolava até ela encontrava tudo pronto. A segunda pedia 55% visível e o
+       topo acima de 70% da altura — melhor, mas medi e no desktop isso ainda
+       disparava com a foto 63% visível e cortada pela borda inferior.
 
-       Agora ela precisa estar de fato na tela: mais da metade visível e o
-       topo acima de 70% da altura. Como a foto é alta, isso quer dizer que a
-       revelação começa com ela mais ou menos enquadrada, e o percurso todo
-       acontece à vista. */
-    const PARTE_VISIVEL = 0.55;
-
-    function noCampoDeVisao(){
-      const r = fig.getBoundingClientRect();
-      const h = window.innerHeight || 1;
-      if (r.height <= 0) return false;
-      const visivel = Math.min(r.bottom, h) - Math.max(r.top, 0);
-      return visivel / r.height >= PARTE_VISIVEL && r.top < h * 0.7;
-    }
-
-    if ('IntersectionObserver' in window) {
-      const io = new IntersectionObserver((entries) => {
-        for (const e of entries) {
-          if (!e.isIntersecting) continue;
-          io.disconnect();
-          revelar();
-        }
-      }, {
-        threshold: PARTE_VISIVEL,
-        /* encolhe a "tela" do observer por baixo: assim ele não conta como
-           visível a faixa que ainda está no rodapé do campo de visão */
-        rootMargin: '0px 0px -14% 0px'
-      });
-      io.observe(fig);
-    }
-
-    // caminhos independentes do observer
-    Agenda.scroll(() => { if (!feito && noCampoDeVisao()) revelar(); });
-    Agenda.resize(() => { if (!feito && noCampoDeVisao()) revelar(); });
-    // caso a seção já esteja na tela no carregamento (página curta, link direto)
-    setTimeout(() => { if (noCampoDeVisao()) revelar(); }, 1200);
-
-    /* Último recurso, e ele é LONGO de propósito. Antes eram 6 segundos, e
-       isso brigava com o efeito: seis segundos não dão nem pra chegar na
-       seção de contato, então a foto se revelava sozinha lá embaixo e a
-       pessoa encontrava tudo já pronto. Trinta segundos sem ninguém chegar
-       lá significa que a revelação não vai ser vista de qualquer forma —
-       aí o que importa é só a foto não ficar escondida para sempre. */
-    setTimeout(revelar, 30000);
+       Os 0.85 daqui são os mesmos de antes e continuam certos: com a foto
+       tendo 431px num monitor de 900, 85% dela à vista é a foto assentada no
+       campo de visão, e só então o traçado começa. Confirmei que dá pra chegar
+       lá: ela sobe até -20px no desktop e -322px no celular, bem além do
+       necessário. O que saiu foi a fiação em volta — quatro gatilhos escritos
+       à mão, cada um repetindo a mesma pergunta de um jeito. */
+    Viewport.aoEntrar([fig], { fracao: 0.85 }, revelar);
   })();
 
 

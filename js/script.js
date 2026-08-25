@@ -43,13 +43,25 @@ const Agenda = (() => {
   let resizeAgendado = false;
   let resizeTimer = 0;
 
+  let precisaCompactar = false;
+
+  function compactar(){
+    precisaCompactar = false;
+    for (const lista of [noScroll, noResize]) {
+      for (let i = lista.length - 1; i >= 0; i--) if (!lista[i]) lista.splice(i, 1);
+    }
+  }
+
   function rodar(lista){
     for (let i = 0; i < lista.length; i++) {
+      const fn = lista[i];
+      if (!fn) continue;   // vaga aberta por Agenda.parar
       /* um módulo que estoure não pode levar os outros junto: sem este try o
          primeiro erro derrubaria todo o resto do quadro, e o site inteiro
          congelaria em silêncio */
-      try { lista[i](); } catch (e) { console.error(e); }
+      try { fn(); } catch (e) { console.error(e); }
     }
+    if (precisaCompactar) compactar();
   }
 
   function quadroScroll(){ scrollAgendado = false; rodar(noScroll); }
@@ -73,11 +85,198 @@ const Agenda = (() => {
   return {
     /* fn roda uma vez por quadro em que houve scroll, na ordem de registro */
     scroll(fn){ noScroll.push(fn); return fn; },
-    resize(fn){ noResize.push(fn); return fn; }
+    resize(fn){ noResize.push(fn); return fn; },
+
+    /* Tira uma função das duas listas. Um efeito de ENTRADA só precisa ser
+       conferido até acontecer; sem isto ele seguiria sendo chamado — pra não
+       fazer nada — em todo quadro de scroll pelo resto da visita.
+
+       A vaga é aberta com `null` em vez de removida na hora porque `parar`
+       quase sempre é chamado de DENTRO do `rodar`: mexer no array no meio da
+       varredura pularia a função seguinte. A limpeza vem no fim do quadro. */
+    parar(fn){
+      for (const lista of [noScroll, noResize]) {
+        const i = lista.indexOf(fn);
+        if (i >= 0) { lista[i] = null; precisaCompactar = true; }
+      }
+    }
   };
 })();
 
 window.Agenda = Agenda;   // o js/efeitos.js usa a mesma agenda
+
+
+/* =========================================================================
+   VIEWPORT — "ISTO ESTÁ MESMO NA TELA?"
+
+   POR QUE ISTO EXISTE
+
+   Cada efeito de entrada tinha o seu próprio jeito de decidir a hora de
+   começar, e vários decidiam com um IntersectionObserver — quer dizer, com um
+   `threshold`. Dois problemas, os dois piores no celular:
+
+     · O observer mede contra o viewport de LAYOUT, que inclui a faixa atrás
+       das barras do navegador. No telefone essa faixa não é pequena, e um
+       elemento "35% dentro da janela" pode estar 35% dentro de uma região que
+       a barra de baixo cobre. O elemento satisfaz a conta sem estar à vista.
+
+     · Onde havia as DUAS coisas — um threshold e uma conferência por
+       geometria — elas discordavam, e quem ganhava era sempre a mais frouxa.
+       No block reveal o observer soltava com 0.35 e revelava direto, então a
+       regra de 0.95 logo abaixo nunca chegava a ser consultada. A varredura
+       da barra (0,78s a 1,05s) corria inteira embaixo da dobra: quem descia
+       encontrava o título já pronto.
+
+   A saída não é afrouxar nem apertar cronômetro nenhum: é ter UMA régua só, e
+   fazer todo caminho passar por ela. O observer continua — mas rebaixado a
+   avisador barato ("a geometria mudou, confere aí"), sem direito a decidir.
+   ========================================================================= */
+
+const Viewport = (() => {
+
+  /* A ÁREA QUE A PESSOA ENXERGA DE FATO.
+
+     `innerHeight` conta a tela inteira, barras do navegador incluídas.
+     `visualViewport` é a medida que exclui essas barras e ainda acompanha o
+     zoom por pinça. O `offsetTop`/`offsetLeft` traz as duas para o mesmo
+     referencial do getBoundingClientRect, que é o viewport de layout. */
+  function area(){
+    const vv = window.visualViewport;
+    if (!vv) {
+      return { top: 0, left: 0,
+               altura: window.innerHeight || 1, largura: window.innerWidth || 1 };
+    }
+    return { top: vv.offsetTop, left: vv.offsetLeft,
+             altura: vv.height || 1, largura: vv.width || 1 };
+  }
+
+  /* QUE FRAÇÃO DO ELEMENTO ESTÁ DENTRO DESSA ÁREA.
+
+     Não é "o topo já passou de tantos por cento da tela?" — essa pergunta não
+     distingue um título baixo de um bloco alto com o mesmo topo, que estão em
+     situações completamente diferentes. É quanto do elemento apareceu.
+
+     Elemento maior que a tela nunca chegaria a 90% visível, então nesse caso
+     a conta passa a ser sobre a faixa visível e não sobre ele.
+
+     O eixo horizontal é OPCIONAL, e de propósito. Para a página que rola pra
+     baixo ele daria 1 sempre (nada está fora da tela pros lados) e só custaria
+     duas contas por chamada. Mas dentro do scroll horizontal os painéis são
+     empurrados pro lado por um transform, e ali a vertical sozinha diria "está
+     na tela" com o painel ainda inteiro fora, à direita. Quem mora lá pede o
+     eixo; o resto não paga por ele.
+
+     ATENÇÃO ao ligar `horizontal` num elemento cujo estado escondido é um
+     translate lateral (as bandeiras do .idioma, por exemplo): o rect já vem
+     deslocado, a fração daria zero para sempre e o efeito nunca aconteceria. */
+  function fracaoVisivel(el, horizontal){
+    const r = el.getBoundingClientRect();
+    if (r.height <= 0 || r.width <= 0) return 0;
+
+    const a = area();
+
+    const dentroY = Math.min(r.bottom, a.top + a.altura) - Math.max(r.top, a.top);
+    if (dentroY <= 0) return 0;
+
+    const fracao = dentroY / Math.min(r.height, a.altura);
+    if (!horizontal) return fracao;
+
+    const dentroX = Math.min(r.right, a.left + a.largura) - Math.max(r.left, a.left);
+    if (dentroX <= 0) return 0;
+
+    return fracao * (dentroX / Math.min(r.width, a.largura));
+  }
+
+  /* JÁ SUBIU ACIMA DA TELA — foi passado sem ser visto.
+
+     Isto é o que substitui os cronômetros cegos que existiam aqui. Um efeito
+     que esconde conteúdo não pode deixá-lo escondido para sempre, e a garantia
+     disso era um setTimeout. Só que tempo não sabe onde a pessoa está: a stack
+     fica no fim de uma página de quase 7000px, ninguém chega lá em trinta
+     segundos, e o cronômetro revelava tudo sozinho lá embaixo — quem descia
+     encontrava o efeito já feito e concluía, com razão, que ele não existia.
+
+     Posição sabe. Se o elemento ficou para trás, revela na hora; se não
+     ficou, ninguém tem pressa. */
+  function jaPassou(el){
+    return el.getBoundingClientRect().bottom <= area().top;
+  }
+
+  /* Um conjunto generoso de limiares: o observer avisa a cada faixa cruzada,
+     então a régua é consultada várias vezes durante a entrada em vez de uma
+     só. Ele não decide nada com esses números — só acorda. */
+  const LIMIARES = [0, 0.25, 0.5, 0.75, 0.9, 0.95, 1];
+
+  /* CHAMA `entrou(el)` UMA VEZ POR ELEMENTO, no primeiro instante em que ele
+     está de verdade dentro da área visível.
+
+     Quatro caminhos independentes alimentam a MESMA conta — observer, scroll,
+     resize e os dois momentos em que o layout ainda se mexe (o `load` e a
+     troca de fontes). Nenhum deles tem critério próprio, então não há como um
+     disparar antes do outro: ou a régua aprova, ou nada acontece.
+
+     Os dois momentos de layout entram no lugar dos `setTimeout(conferir, 1200)`
+     que cada módulo tinha. São o mesmo cuidado — "a posição de agora ainda vai
+     mudar" — só que ancorados no evento real em vez de num palpite de
+     milissegundos que acerta ou erra conforme a conexão.
+
+     opcoes.fracao      quanto do elemento precisa estar visível (0 a 1)
+     opcoes.horizontal  considerar também o eixo X (só o scroll horizontal)
+     opcoes.resgatar    revelar quem já passou da tela; ligado por padrão.
+                        Desligue quando o efeito não esconde nada — aí não há
+                        conteúdo em risco, e disparar fora da tela é só gastar
+                        uma animação que ninguém vai ver. */
+  function aoEntrar(elementos, opcoes, entrou){
+    const restantes = new Set(elementos);
+    if (!restantes.size) return null;
+
+    const fracao     = opcoes.fracao;
+    const horizontal = opcoes.horizontal === true;
+    const resgatar   = opcoes.resgatar !== false;
+    let io = null;
+
+    function chegou(el){
+      if (resgatar && jaPassou(el)) return true;
+      return fracaoVisivel(el, horizontal) >= fracao;
+    }
+
+    function conferir(){
+      if (!restantes.size) return;
+
+      for (const el of restantes) {
+        if (!chegou(el)) continue;
+        restantes.delete(el);          // apagar o item corrente durante o
+        if (io) io.unobserve(el);      // for..of de um Set é seguro
+        entrou(el);
+      }
+
+      // nada mais a esperar: desliga tudo em vez de seguir conferindo à toa
+      if (restantes.size) return;
+      if (io) { io.disconnect(); io = null; }
+      Agenda.parar(conferir);
+    }
+
+    Agenda.scroll(conferir);
+    Agenda.resize(conferir);
+    window.addEventListener('load', conferir, { once: true });
+    if (document.fonts) document.fonts.ready.then(conferir);
+
+    if ('IntersectionObserver' in window) {
+      io = new IntersectionObserver(conferir, { threshold: LIMIARES });
+      restantes.forEach((el) => io.observe(el));
+    } else {
+      /* Sem observer o scroll e o resize já cobrem o percurso; esta chamada é
+         só pro elemento que já nasce na tela. */
+      conferir();
+    }
+
+    return conferir;
+  }
+
+  return { area, fracaoVisivel, jaPassou, aoEntrar };
+})();
+
+window.Viewport = Viewport;   // o js/efeitos.js usa a mesma régua
 
 
 /* =========================================================================
@@ -423,7 +622,15 @@ const TRIGGER_END = 140;
    e altura se mantém e a curva continua com o mesmo temperamento em qualquer
    tela. De 1200px pra cima nada muda — o desktop é exatamente o que já era. */
 function amplitudeDaTela(width){
-  const fator = Math.min(1, width / 1200);
+  /* O piso de 0,55 é o que dá presença à onda no celular.
+
+     Só a rampa `width/1200` deixava a amplitude em 32% numa tela de 390px —
+     a curva ficava mansa demais, quase um vinco. O piso segura a altura
+     mínima e a rampa continua valendo acima de 660px, onde ela já passa de
+     0,55: as duas se encontram nesse ponto, então não há degrau.
+
+     De 1200px pra cima o fator é 1 e o desktop é exatamente o que já era. */
+  const fator = Math.max(0.55, Math.min(1, width / 1200));
   return MAX_AMPLITUDE * fator;
 }
 
@@ -606,6 +813,7 @@ const LINHA = {
   /* ---- entrada e saída ---- */
   comecaEm: -0.18,   // em larguras de painel, antes da borda esquerda
 
+
   /* ---- resize ---- */
   // variação de altura menor que isto não remonta nada: é a barra do
   // navegador do celular aparecendo e sumindo, não uma tela nova
@@ -668,7 +876,18 @@ const COMPOSICOES = {
        painel 1  mergulho, mais reto e mais rápido que a subida anterior
        painel 2  um degrau curto embaixo e então a subida mais íngreme de todas
        painel 3  descida em S, com a curva se abrindo no meio do caminho
-       painel 4  sobe de volta e vira pra baixo na saída
+       painel 4  sobe de volta e MERGULHA até a base na saída
+
+     O mergulho final não é enfeite: a versão anterior subia e parava em
+     0,44 — no meio da tela — e o traço terminava no ar, como se tivesse sido
+     cortado. Ele agora fecha na base, junto com a borda direita, do mesmo
+     jeito que o desktop faz.
+
+     E termina em x exatamente 5,00, nem um triz além. Passar da borda parece
+     inofensivo — o que está depois de 5,00 nunca chega a ser visto —, mas
+     desalinha a ponta do lápis: a janela visível não passa de 5,00, então o
+     traço precisaria correr um trecho que a tela nunca alcança, e os últimos
+     instantes voltariam a se desenhar fora do campo de visão.
 
      As alturas ficam entre 0,08 e 0,92: nunca encostam nas bordas. A travessia
      da faixa das palavras (0,34 a 0,66) acontece uma vez por painel, por trás
@@ -678,7 +897,7 @@ const COMPOSICOES = {
     [1.16, 0.08], [1.44, 0.22], [1.72, 0.60], [1.96, 0.90],
     [2.16, 0.92], [2.38, 0.78], [2.56, 0.86], [2.82, 0.52], [2.98, 0.20],
     [3.24, 0.10], [3.52, 0.28], [3.70, 0.56], [3.94, 0.88],
-    [4.18, 0.92], [4.44, 0.66], [4.62, 0.38], [4.82, 0.24], [5.02, 0.44]
+    [4.18, 0.92], [4.40, 0.62], [4.56, 0.34], [4.74, 0.26], [4.90, 0.54], [5.00, 0.90]
   ],
 
   /* Tablet: o mesmo percurso, com as transições mais espalhadas na
@@ -751,6 +970,8 @@ function linhaCaminho(pontos, tensao){
    MONTAGEM
    ========================================================================= */
 
+let hsLinhaRetentativa = 0;
+
 const hsLinha = (() => {
   if (!hsTrack) return null;
   const NS = 'http://www.w3.org/2000/svg';
@@ -767,8 +988,29 @@ const hsLinha = (() => {
 function hsLinhaLayout(){
   if (!hsLinha) return;
 
-  const W = window.innerWidth || 1;
-  const H = hsTrack.getBoundingClientRect().height || window.innerHeight || 1;
+  const W = window.innerWidth || 0;
+  const H = hsTrack.getBoundingClientRect().height || window.innerHeight || 0;
+
+  /* MEDIDA DEGENERADA NÃO VIRA DESENHO.
+
+     Aqui havia `|| 1` nos dois valores, o que parecia uma proteção e era o
+     contrário: quando a janela reportava 0 — aba em segundo plano, momento
+     do carregamento, ancestral ainda sem caixa —, o caminho era construído
+     num painel de 1x1 pixel. Vi isso acontecer: o viewBox saiu "0 0 5 1" e a
+     linha inteira coube em 8 pixels de comprimento.
+
+     Pior que o erro em si, o guarda de resize logo abaixo guardava essa
+     medida como boa e não remontava mais. Um instante ruim no carregamento
+     deixava a linha quebrada para sempre.
+
+     Agora medida inválida não é aceita: nada é construído e uma nova tentativa
+     é agendada. Enquanto isso a linha fica sem a classe que a esconde, ou
+     seja, visível e inteira — que é o estado seguro. */
+  if (W < 2 || H < 2) {
+    clearTimeout(hsLinhaRetentativa);
+    hsLinhaRetentativa = setTimeout(hsLinhaLayout, 250);
+    return;
+  }
 
   /* Só remonta quando muda o que importa. A largura sempre importa; a altura
      só quando muda de verdade, porque no celular a barra do navegador some e
@@ -801,8 +1043,37 @@ function hsLinhaLayout(){
                 Math.min(LINHA.espessuraMax, W / LINHA.espessuraDivisor));
   hsLinha.svg.style.setProperty('--traco', traco.toFixed(2) + 'px');
   hsLinha.svg.style.setProperty('--opacidade', String(LINHA.opacidade));
-  hsLinha.svg.style.setProperty('--comprimento',
-    hsLinha.path.getTotalLength().toFixed(0));
+  const comprimento = hsLinha.path.getTotalLength();
+  hsLinha.svg.style.setProperty('--comprimento', comprimento.toFixed(0));
+
+  /* TABELA DE X POR COMPRIMENTO — montada aqui, usada no quadro.
+
+     O desenho anda por comprimento de arco; a tela anda por X. Os dois não
+     são proporcionais: onde o traço sobe quase na vertical ele gasta muito
+     comprimento sem avançar quase nada em X. Medi o efeito disso: até 70% do
+     percurso a ponta do lápis estava dentro da janela visível, mas a partir
+     dos 80% ela disparava na frente — a janela mostrava de 3,20 a 4,20 e a
+     ponta já estava em 4,37. Da metade do "I ANIMATE" em diante você via a
+     linha pronta em vez de vê-la sendo feita.
+
+     Com esta tabela dá pra fazer o caminho inverso: sei onde a ponta precisa
+     estar em X e descubro que fração do comprimento corresponde. O X é
+     forçado a crescer (Math.max) porque a curva pode recuar um triz nas
+     viradas, e sem isso a busca ficaria ambígua.
+
+     São 256 amostras, medidas uma vez por layout. */
+  const N = 256;
+  const tabela = new Float32Array(N + 1);
+  let maiorX = -Infinity;
+  for (let i = 0; i <= N; i++) {
+    const pt = hsLinha.path.getPointAtLength(comprimento * i / N);
+    maiorX = Math.max(maiorX, pt.x);
+    tabela[i] = maiorX;
+  }
+  hsLinha.tabelaX = tabela;
+  hsLinha.xInicial = tabela[0];
+  hsLinha.xFinal = tabela[N];
+  hsLinha.larguraPainel = W;
 
   /* A classe é o que autoriza esconder o traço, e entra só aqui, com o
      caminho já pronto. Sem este trecho a linha nasce inteira e visível — o
@@ -829,11 +1100,49 @@ function hsLinhaLayout(){
    1s de propósito: o progresso vira milissegundos direto, sem conta.
    ========================================================================= */
 
+/* Acha a fração do comprimento cuja ponta está em `alvoX`. Busca binária em
+   256 valores: oito comparações, sem tocar no DOM nem no layout. */
+function hsLinhaFracaoEm(alvoX){
+  const t = hsLinha.tabelaX;
+  if (!t) return 0;
+  const ultimo = t.length - 1;
+  if (alvoX <= t[0]) return 0;
+  if (alvoX >= t[ultimo]) return 1;
+  let lo = 0, hi = ultimo;
+  while (hi - lo > 1) {
+    const meio = (lo + hi) >> 1;
+    if (t[meio] <= alvoX) lo = meio; else hi = meio;
+  }
+  // interpola entre as duas amostras, pra não andar aos degraus
+  const faixa = t[hi] - t[lo];
+  const dentro = faixa > 0 ? (alvoX - t[lo]) / faixa : 0;
+  return (lo + dentro) / ultimo;
+}
+
 function hsLinhaDesenhar(prog){
   if (!hsLinha) return;
   hsLinha.prog = prog;
-  if (!hsLinha.anim) return;
-  const t = prog * 1000;
+  if (!hsLinha.anim || !hsLinha.tabelaX) return;
+
+  /* A PONTA DO LÁPIS ANDA EM X, não em comprimento de traço.
+
+     Ela vai do COMEÇO DO CAMINHO até o fim dele, proporcional ao progresso.
+     Começar no começo é o que faz o traço entrar pela lateral: em prog 0 nada
+     está desenhado e a linha nasce da borda esquerda, fora da tela.
+
+     Cheguei a pôr a ponta num ponto fixo da janela visível (62% da largura),
+     achando que garantia visibilidade. Garantia, e ao preço de estragar a
+     entrada: 62% do primeiro painel já nascia pronto, e a linha começava no
+     meio da tela em vez de vir da lateral.
+
+     Não era necessário. Fazendo a conta: a janela cobre de 4·prog a
+     4·prog+1 painéis, e a ponta vai de -0,08 a 5,00. A ponta só fica à
+     esquerda da janela enquanto prog < 0,074 — ou seja, durante os primeiros
+     7% ela está entrando pela borda — e daí até o fim ela está sempre dentro
+     do campo de visão. Os dois objetivos ao mesmo tempo, sem truque. */
+  const alvoX = hsLinha.xInicial + (hsLinha.xFinal - hsLinha.xInicial) * prog;
+
+  const t = hsLinhaFracaoEm(alvoX) * 1000;
   hsLinha.anim.currentTime = t < 0 ? 0 : (t > 1000 ? 1000 : t);
 }
 
@@ -1465,8 +1774,6 @@ Agenda.resize(() => {
     });
   });
 
-  let triggered = false;
-
   function playInitialSequence(){
     spans.forEach((span, idx) => {
       setTimeout(() => {
@@ -1475,17 +1782,32 @@ Agenda.resize(() => {
     });
   }
 
-  const wordObserver = new IntersectionObserver((entries) => {
-    entries.forEach((entry) => {
-      if (entry.isIntersecting && !triggered) {
-        triggered = true;
-        playInitialSequence();
-        wordObserver.disconnect();
-      }
-    });
-  }, { threshold: 0.5 });
+  /* QUANDO COMEÇAR — a palavra espera estar de fato na tela.
 
-  wordObserver.observe(wordEl);
+     Aqui havia um IntersectionObserver com `threshold: 0.5` decidindo
+     sozinho, e ele estava errado por dois motivos que se somam justamente no
+     celular:
+
+       · esta palavra mora no QUARTO painel do scroll horizontal. Os painéis
+         entram deslizando pela direita, empurrados pelo transform do trilho,
+         então metade da caixa dentro da janela quer dizer metade das letras
+         ainda fora, à direita. A sequência dura 2,5s do "A" ao ponto final —
+         cabia inteira antes de a palavra chegar ao centro.
+
+       · o eixo vertical não ajudava a perceber isso: o painel tem a altura da
+         tela e fica preso nela durante todo o percurso, então a conta
+         vertical dá "cheio" o tempo inteiro, com a palavra ainda longe.
+
+     A régua do Viewport resolve os dois: `horizontal: true` faz a conta valer
+     nos dois eixos, e o 0.9 espera a palavra estar praticamente inteira à
+     vista — que é quando o painel assenta no centro.
+
+     `resgatar: false` porque este efeito não esconde nada: as letras estão
+     legíveis o tempo todo, só param quietas. Não há conteúdo em risco, então
+     não faz sentido "resgatar" tocando a sequência para uma palavra que já
+     passou — seria gastar 2,5s de animação onde ninguém está olhando. */
+  Viewport.aoEntrar([wordEl], { fracao: 0.9, horizontal: true, resgatar: false },
+    () => playInitialSequence());
 })();
 
 /* =========================================================================

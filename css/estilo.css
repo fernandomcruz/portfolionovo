@@ -238,7 +238,11 @@ body{
      na largura da tela, então num celular ela já é curta na horizontal e altura
      demais a transformaria num bico. Subiu na mesma proporção do desktop
      (cerca de 1,35x) e nada além disso. */
-  .wave-cap{ --altura-onda: clamp(240px, 44vw, 380px); }
+  /* A altura da faixa acompanha a LARGURA (55vw), e isso é o que mantém a
+     onda com o mesmo temperamento em qualquer celular. Com altura fixa, a
+     mesma curva fica proporcionalmente mais alta quanto mais estreita a
+     tela — que é como ela virava um bico em 320px. */
+  .wave-cap{ --altura-onda: clamp(180px, 55vw, 380px); }
 }
 
 .wave-cap svg{
