@@ -652,14 +652,33 @@ const LINHA = {
    ========================================================================= */
 
 const COMPOSICOES = {
-  /* Celular: predominantemente vertical. Duas subidas longas e dois
-     mergulhos, com um trecho de descanso baixo entre eles. */
+  /* CELULAR — uma travessia inteira por painel.
+
+     A chave está em lembrar o que a pessoa vê: no celular o trilho mostra UM
+     painel de cada vez, uma tela cheia. Então o gesto tem que caber num
+     painel e valer por si — se a composição espalha uma curva por dois
+     painéis, cada tela recebe metade de um movimento e é isso que lê como
+     "linha passando", não como linha percorrendo.
+
+     Aqui cada painel recebe UMA travessia de altura quase inteira, com
+     inclinação e feitio próprios. Nenhum trecho plano, nenhum platô: a linha
+     está sempre em trânsito, e muda de caráter a cada tela.
+
+       painel 0  diagonal longa subindo da base até o topo
+       painel 1  mergulho, mais reto e mais rápido que a subida anterior
+       painel 2  um degrau curto embaixo e então a subida mais íngreme de todas
+       painel 3  descida em S, com a curva se abrindo no meio do caminho
+       painel 4  sobe de volta e vira pra baixo na saída
+
+     As alturas ficam entre 0,08 e 0,92: nunca encostam nas bordas. A travessia
+     da faixa das palavras (0,34 a 0,66) acontece uma vez por painel, por trás
+     do texto, que é o que costura a linha ao conteúdo. */
   celular: [
-    [-0.10, 0.92], [0.22, 0.80], [0.48, 0.40], [0.80, 0.12],
-    [1.12, 0.10], [1.42, 0.34], [1.70, 0.74], [2.00, 0.92],
-    [2.30, 0.88], [2.62, 0.66], [2.90, 0.30], [3.20, 0.10],
-    [3.52, 0.16], [3.82, 0.50], [4.10, 0.82], [4.42, 0.92],
-    [4.72, 0.80], [5.00, 0.60]
+    [-0.08, 0.92], [0.30, 0.86], [0.62, 0.52], [0.90, 0.16],
+    [1.16, 0.08], [1.44, 0.22], [1.72, 0.60], [1.96, 0.90],
+    [2.16, 0.92], [2.38, 0.78], [2.56, 0.86], [2.82, 0.52], [2.98, 0.20],
+    [3.24, 0.10], [3.52, 0.28], [3.70, 0.56], [3.94, 0.88],
+    [4.18, 0.92], [4.44, 0.66], [4.62, 0.38], [4.82, 0.24], [5.02, 0.44]
   ],
 
   /* Tablet: o mesmo percurso, com as transições mais espalhadas na
