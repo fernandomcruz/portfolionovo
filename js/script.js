@@ -9,6 +9,78 @@ const PREFERE_MENOS_MOVIMENTO =
 
 
 /* =========================================================================
+   AGENDA — UM ÚNICO OUVINTE DE SCROLL E UM ÚNICO DE RESIZE
+
+   POR QUE ISTO EXISTE
+
+   Contei o que havia antes, somando este arquivo e o js/efeitos.js:
+   NOVE ouvintes de `scroll` e DOZE de `resize`, cada módulo com o seu próprio
+   `requestAnimationFrame` e a sua própria trava de agendamento.
+
+   No scroll isso significava até oito callbacks de rAF disputando o mesmo
+   quadro, cada um lendo o layout por conta própria. Pior: dois deles nem
+   agendavam — rodavam direto no evento, e evento de scroll chega bem mais
+   vezes que quadro.
+
+   No resize era mais grave. Nenhum dos doze estava amortecido, e vários fazem
+   trabalho pesado (medir texto no canvas, reescrever a altura do trilho
+   horizontal, recalcular a velocidade dos marquees). Arrastar a borda da
+   janela disparava os doze a cada pixel. E no celular `resize` não é um gesto
+   raro: ele dispara toda vez que a barra do navegador some ou volta, ou seja,
+   no meio da rolagem.
+
+   Aqui os dois viram um só de cada, coalescido num único quadro. Cada módulo
+   continua com a sua função exatamente como estava — muda só quem a chama.
+
+   O `resize` ainda ganha um atraso curto por cima do rAF: redimensionar é uma
+   rajada de eventos, e o que interessa é o tamanho final, não os intermediários.
+   ========================================================================= */
+
+const Agenda = (() => {
+  const noScroll = [];
+  const noResize = [];
+  let scrollAgendado = false;
+  let resizeAgendado = false;
+  let resizeTimer = 0;
+
+  function rodar(lista){
+    for (let i = 0; i < lista.length; i++) {
+      /* um módulo que estoure não pode levar os outros junto: sem este try o
+         primeiro erro derrubaria todo o resto do quadro, e o site inteiro
+         congelaria em silêncio */
+      try { lista[i](); } catch (e) { console.error(e); }
+    }
+  }
+
+  function quadroScroll(){ scrollAgendado = false; rodar(noScroll); }
+  function quadroResize(){ resizeAgendado = false; rodar(noResize); }
+
+  window.addEventListener('scroll', () => {
+    if (scrollAgendado) return;
+    scrollAgendado = true;
+    requestAnimationFrame(quadroScroll);
+  }, { passive: true });
+
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (resizeAgendado) return;
+      resizeAgendado = true;
+      requestAnimationFrame(quadroResize);
+    }, 60);
+  }, { passive: true });
+
+  return {
+    /* fn roda uma vez por quadro em que houve scroll, na ordem de registro */
+    scroll(fn){ noScroll.push(fn); return fn; },
+    resize(fn){ noResize.push(fn); return fn; }
+  };
+})();
+
+window.Agenda = Agenda;   // o js/efeitos.js usa a mesma agenda
+
+
+/* =========================================================================
    TEXTO DIGITADO — "I'm a ___" (Typed.js)
    ========================================================================= */
 
@@ -114,9 +186,32 @@ if (menuToggle) {
   }
 }
 
+/* O AQUECIMENTO AUTOMÁTICO TEM UMA CONDIÇÃO AGORA.
+
+   As oito fotos são 249 KB (eram 829 KB antes de virarem WebP do tamanho
+   certo). Baixá-las sozinho, para um menu que a pessoa talvez nem abra, é
+   barato numa rede boa e caro numa ruim — e em plano limitado é gastar dado
+   de alguém sem ele ter pedido.
+
+   Quem sinaliza isso é a Network Information API: `saveData` quando o
+   aparelho está em economia de dados, e `effectiveType` quando a conexão é
+   lenta. Nesses casos o aquecimento automático simplesmente não acontece.
+
+   Isto NÃO desliga o efeito: os gatilhos de intenção (o dedo encostando no
+   botão, o mouse chegando perto, o foco pelo teclado) continuam valendo, e o
+   próprio `openMenu` carrega como rede de segurança. Quem abre o menu vê as
+   fotos do mesmo jeito — só quem nunca abre é que deixa de pagar por elas. */
+function conexaoPedeEconomia(){
+  const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  if (!c) return false;                                  // sem informação: segue o padrão
+  if (c.saveData) return true;
+  return /(^|-)(2g|slow-2g)$/.test(c.effectiveType || '');
+}
+
 // depois que a página terminou de carregar, sem pressa: se ninguém encostou no
 // menu até aqui, as fotos entram na fila sem disputar nada
 window.addEventListener('load', () => {
+  if (conexaoPedeEconomia()) return;
   setTimeout(aquecerFotosDoMenu, 2500);
 }, { once: true });
 
@@ -357,12 +452,38 @@ waveCapSvg.setAttribute('viewBox', `0 0 1 ${SVG_HEIGHT}`);
    animações. Agora o desenho acontece só quando existe motivo (scroll ou
    resize) e apenas enquanto a onda está perto da tela. */
 let lastWaveKey = '';
-let waveAgendado = false;
+let tentativasDaOnda = 0;
 
 function desenharWaveCap(){
-  waveAgendado = false;
-
   const vw = window.innerWidth;
+
+  /* LARGURA ZERO NÃO SE DESENHA — e sem esta linha ela não falha em silêncio,
+     ela envenena o path.
+
+     Em `buildCapWavePath` o ângulo sai de `x / width`, e x vale
+     `(i / segments) * width`. Com width 0 isso é 0/0, ou seja NaN, e o NaN
+     atravessa tudo: `Math.sin(NaN)` é NaN, `0 * NaN` é NaN. O `d` do <path>
+     terminava com "L0.0,NaN" e o navegador rejeitava o atributo inteiro —
+     erro no console e onda nenhuma na tela.
+
+     Vale notar por que o clamp do `progress` não segurava isso: `Math.max(0,
+     NaN)` devolve NaN, não 0. Clamp não sanitiza NaN, e é fácil supor que sim.
+
+     Uma janela real nunca tem largura 0. Mas a primeira chamada acontece na
+     execução do script, antes da primeira pintura, e existe contexto (iframe
+     recém-criado, aba ainda não composta) em que a medida ainda não chegou.
+
+     Sair fora não basta, porém: se as primeiras chamadas caírem todas aqui, e
+     a pessoa não rolar nem redimensionar, ninguém mais desenha e a faixa fica
+     vazia. Por isso a guarda REAGENDA em vez de só desistir — no próximo
+     quadro a medida já existe. O teto de tentativas evita transformar isso num
+     laço eterno num contexto que nunca vai ter largura. */
+  if (!vw) {
+    if (tentativasDaOnda++ < 30) requestAnimationFrame(desenharWaveCap);
+    return;
+  }
+  tentativasDaOnda = 0;
+
   const rect = conteudoEl.getBoundingClientRect();
 
   // fora de alcance: a onda já está formada ou nem começou — nada a redesenhar
@@ -380,19 +501,24 @@ function desenharWaveCap(){
   waveCapPath.setAttribute('d', buildCapWavePath(progress, vw));
 }
 
-function updateWaveCap(){
-  if (waveAgendado) return;
-  waveAgendado = true;
-  requestAnimationFrame(desenharWaveCap);
-}
-
-window.addEventListener('scroll', updateWaveCap, { passive: true });
-window.addEventListener('resize', () => {
+/* A trava `waveAgendado` que existia aqui saiu: quem coalesce agora é a
+   Agenda, que já entrega no máximo uma passada por quadro. */
+Agenda.scroll(desenharWaveCap);
+Agenda.resize(() => {
   TRIGGER_START = window.innerHeight;
   lastWaveKey = '';               // força o redesenho na nova largura
-  updateWaveCap();
+  desenharWaveCap();
 });
-updateWaveCap();
+desenharWaveCap();
+
+/* Rede de segurança para o caso acima: se a primeira chamada caiu na guarda de
+   largura zero, ninguém mais desenharia até a pessoa rolar ou redimensionar.
+   Uma passada no `load`, com a medida já boa, fecha esse buraco. */
+window.addEventListener('load', () => {
+  TRIGGER_START = window.innerHeight;
+  lastWaveKey = '';
+  desenharWaveCap();
+}, { once: true });
 
 
 /* =========================================================================
@@ -401,13 +527,296 @@ updateWaveCap();
 
 const hsOuter = document.getElementById('hsOuter');
 const hsTrack = document.getElementById('hsTrack');
-const hsPanelCount = hsTrack.children.length;
+// conta só os painéis: o trilho tem também o SVG da linha desenhada
+const hsPanelCount = hsTrack.querySelectorAll(':scope > .hs-panel').length;
 
 let hsCurrent = 0;
 let hsTarget = 0;
+/* quanto o trilho anda do começo ao fim, em px — é o que transforma a posição
+   atual em progresso de 0 a 1 pra linha */
+let hsPercurso = 0;
 let hsTicking = false;
 
 const EXTRA_PIN_VH = 0.2; // nº de telas extras de pausa antes do .stack começar a subir — ajuste aqui
+
+/* =========================================================================
+   LINHA DESENHADA PELO SCROLL
+
+   Um traço único atravessando os cinco painéis do scroll horizontal, que vai
+   sendo desenhado conforme eles passam.
+
+   ---------------------------------------------------------------------
+   COMO ESTÁ ORGANIZADO
+   ---------------------------------------------------------------------
+     AJUSTES        todos os números que valem a pena mexer, num lugar só
+     GEOMETRIA      os pontos por onde o traço passa (a composição)
+     TRAÇADO        os pontos viram uma curva suave (Catmull-Rom → Bézier)
+     MONTAGEM       cria o SVG uma vez; recalcula só no resize
+     DESENHO        o quadro: uma escrita, nada mais
+
+   ---------------------------------------------------------------------
+   AS TRÊS DECISÕES QUE SUSTENTAM ISTO
+   ---------------------------------------------------------------------
+   1. UMA UNIDADE SÓ (U) NOS DOIS EIXOS.
+      Escrever x em larguras de painel e y em alturas parece prático e é
+      justamente o defeito: o painel muda de formato entre telas (1440x900 num
+      monitor, 390x844 num celular), então um passo na vertical não vale o
+      mesmo que um na horizontal e a MESMA descrição gera desenhos diferentes.
+      Círculo vira elipse, arco manso vira espeto. Aqui todo GESTO é medido em
+      múltiplos de U; só a POSIÇÃO de cada gesto vem da largura do painel,
+      porque é o que faz o traço acompanhar a seção.
+
+   2. A COMPOSIÇÃO É UMA LISTA DE PONTOS, NÃO UMA LISTA DE CURVAS.
+      Os pontos viram curva por Catmull-Rom, que garante tangente contínua nas
+      emendas — é isso que faz a linha parecer um traço só, contínuo, em vez
+      de trechos costurados. E editar a composição passa a ser mover pontos.
+
+   3. QUEM MOVE O PONTEIRO É A WEB ANIMATIONS API.
+      O desenho é um `stroke-dashoffset` animado em CSS, pausado, e o quadro
+      só escreve `currentTime`. Não passa por recálculo de estilo. Medido:
+      0,059ms por quadro. Não há ouvinte de scroll nem requestAnimationFrame
+      próprios — ele pega carona no ciclo que já move o trilho, que é o único
+      jeito de garantir que a linha e os painéis nunca saiam de sincronia.
+
+   Sem JS, este arquivo não roda e o SVG nem chega a existir: a seção continua
+   inteira e funcional. A linha é enfeite, não estrutura.
+   ========================================================================= */
+
+const LINHA = {
+  /* ---- composição ---- */
+  // os dois pontos de adaptação. Poucos de propósito: dentro de cada
+  // categoria a geometria responde sozinha, porque as coordenadas são
+  // frações do painel
+  pontoCelular: 768,
+  pontoDesktop: 1180,
+  // o quanto a composição ocupa da altura do painel. 1 = como foi desenhada;
+  // abaixo disso ela se recolhe em direção ao meio, sem mudar de forma
+  amplitude: 1,
+
+  /* ---- traço ---- */
+  espessuraMin: 10,
+  espessuraMax: 30,
+  espessuraDivisor: 34,   // largura da tela / isto = espessura desejada
+  opacidade: 0.85,
+
+  /* ---- curva ---- */
+  // 0 = quinas; 0.5 = Catmull-Rom clássico; acima disso começa a inchar
+  tensao: 0.5,
+
+  /* ---- entrada e saída ---- */
+  comecaEm: -0.18,   // em larguras de painel, antes da borda esquerda
+
+  /* ---- resize ---- */
+  // variação de altura menor que isto não remonta nada: é a barra do
+  // navegador do celular aparecendo e sumindo, não uma tela nova
+  toleranciaDeAltura: 0.18
+};
+
+
+/* =========================================================================
+   GEOMETRIA — a composição
+
+   O QUE MUDOU E POR QUÊ
+
+   A versão anterior mantinha o traço inteiro numa faixa entre 0,59 e 0,90 da
+   altura — 31% do painel, sempre abaixo das palavras. Por mais curva que
+   tivesse, lia como uma linha horizontal, porque nunca mudava de região.
+
+   Medindo o painel, o texto ocupa de 0,34 a 0,66 da altura. Sobram DUAS
+   faixas livres, uma acima e outra abaixo, com cerca de um terço da altura
+   cada. A composição agora usa as duas e atravessa entre elas em pontos
+   escolhidos — passando POR TRÁS das palavras, já que o SVG está em z-index 0
+   e o texto em 1. Isso triplica a altura ocupada e é o que transforma o traço
+   de "atravessa a página" em "percorre a página".
+
+   AS TRÊS COMPOSIÇÕES
+
+   Os pontos são normalizados: x em larguras de painel (0 a 5), y em frações
+   da altura (0 = topo, 1 = base). Não há escala nem `transform` envolvidos —
+   cada composição é desenhada para o formato do painel dela:
+
+     · CELULAR   painel em pé (390x844, formato 0,46). Os mesmos 0,6 de
+                 largura valem 234px, e 0,6 de altura valem 506px: o gesto
+                 sai naturalmente íngreme. A composição aproveita isso com
+                 subidas e mergulhos quase verticais.
+     · TABLET    formato intermediário. Gestos mais largos que no celular,
+                 menos extremos que no desktop.
+     · DESKTOP   painel deitado (1440x900, formato 1,60). Aqui a mesma
+                 subida vira uma diagonal ampla, que é o que o espaço pede.
+
+   Mesma direção artística nos três — sobe, plana no alto, mergulha, estica
+   embaixo, sobe de novo, desce em diagonal — com o ritmo recalibrado para o
+   espaço de cada um. Nenhuma é a outra reduzida.
+
+   As alturas ficam entre 0,10 e 0,92 e nunca encostam nas bordas.
+   ========================================================================= */
+
+const COMPOSICOES = {
+  /* Celular: predominantemente vertical. Duas subidas longas e dois
+     mergulhos, com um trecho de descanso baixo entre eles. */
+  celular: [
+    [-0.10, 0.92], [0.22, 0.80], [0.48, 0.40], [0.80, 0.12],
+    [1.12, 0.10], [1.42, 0.34], [1.70, 0.74], [2.00, 0.92],
+    [2.30, 0.88], [2.62, 0.66], [2.90, 0.30], [3.20, 0.10],
+    [3.52, 0.16], [3.82, 0.50], [4.10, 0.82], [4.42, 0.92],
+    [4.72, 0.80], [5.00, 0.60]
+  ],
+
+  /* Tablet: o mesmo percurso, com as transições mais espalhadas na
+     horizontal — o painel é menos alto em proporção. */
+  tablet: [
+    [-0.12, 0.88], [0.28, 0.76], [0.58, 0.42], [0.92, 0.16],
+    [1.30, 0.12], [1.66, 0.28], [1.96, 0.62], [2.28, 0.86],
+    [2.66, 0.90], [3.00, 0.80], [3.26, 0.48], [3.54, 0.16],
+    [3.88, 0.12], [4.22, 0.38], [4.56, 0.70], [4.84, 0.88],
+    [5.00, 0.84]
+  ],
+
+  /* Desktop: diagonais amplas. As travessias da faixa do texto são poucas e
+     escolhidas — uma por painel e meio —, e entre elas o traço tem trechos
+     de descanso: o platô alto no painel 1 e a esticada baixa no painel 2,
+     que é o espaço negativo da composição. */
+  desktop: [
+    [-0.15, 0.86], [0.30, 0.78], [0.62, 0.46], [0.95, 0.18],
+    [1.35, 0.12], [1.72, 0.22], [2.02, 0.52], [2.32, 0.82],
+    [2.70, 0.90], [3.05, 0.86], [3.30, 0.58], [3.55, 0.20],
+    [3.90, 0.10], [4.20, 0.30], [4.50, 0.62], [4.80, 0.84],
+    [5.00, 0.90]
+  ]
+};
+
+/* Poucos pontos de adaptação, e escolhidos pelo FORMATO do painel e não só
+   pela largura: é a proporção que decide se um gesto sai íngreme ou deitado,
+   e é ela que um tablet deitado e um monitor têm em comum. */
+function linhaComposicao(W, H){
+  const formato = W / H;
+  if (W < LINHA.pontoCelular || formato < 0.72) return COMPOSICOES.celular;
+  if (W < LINHA.pontoDesktop || formato < 1.25) return COMPOSICOES.tablet;
+  return COMPOSICOES.desktop;
+}
+
+
+/* =========================================================================
+   TRAÇADO — pontos viram curva
+
+   Catmull-Rom passa POR todos os pontos (diferente de Bézier, onde os pontos
+   de controle ficam fora da curva) e entrega tangente contínua nas emendas.
+   Na prática: eu movo um ponto, a curva inteira se reacomoda sozinha e
+   continua suave. É o que permite editar a composição sem recalcular
+   controles à mão.
+
+   A conversão para Bézier cúbica é a fórmula padrão; a tensão controla o
+   quanto a curva "abre" nas passagens.
+   ========================================================================= */
+
+function linhaCaminho(pontos, tensao){
+  if (pontos.length < 2) return '';
+
+  const n = (i) => pontos[Math.max(0, Math.min(pontos.length - 1, i))];
+  const f = (v) => v.toFixed(1);
+  const partes = [`M${f(pontos[0][0])},${f(pontos[0][1])}`];
+
+  for (let i = 0; i < pontos.length - 1; i++) {
+    const p0 = n(i - 1), p1 = n(i), p2 = n(i + 1), p3 = n(i + 2);
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6 * tensao * 2;
+    const c1y = p1[1] + (p2[1] - p0[1]) / 6 * tensao * 2;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6 * tensao * 2;
+    const c2y = p2[1] - (p3[1] - p1[1]) / 6 * tensao * 2;
+    partes.push(` C${f(c1x)},${f(c1y)} ${f(c2x)},${f(c2y)} ${f(p2[0])},${f(p2[1])}`);
+  }
+  return partes.join('');
+}
+
+
+/* =========================================================================
+   MONTAGEM
+   ========================================================================= */
+
+const hsLinha = (() => {
+  if (!hsTrack) return null;
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('class', 'hs-linha');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('preserveAspectRatio', 'none');
+  const path = document.createElementNS(NS, 'path');
+  svg.appendChild(path);
+  hsTrack.insertBefore(svg, hsTrack.firstChild);
+  return { svg, path, anim: null, larguraMedida: 0, alturaMedida: 0, prog: 0 };
+})();
+
+function hsLinhaLayout(){
+  if (!hsLinha) return;
+
+  const W = window.innerWidth || 1;
+  const H = hsTrack.getBoundingClientRect().height || window.innerHeight || 1;
+
+  /* Só remonta quando muda o que importa. A largura sempre importa; a altura
+     só quando muda de verdade, porque no celular a barra do navegador some e
+     volta o tempo todo e cada uma dessas mexidas dispara um resize. Remontar
+     ali reiniciaria o desenho no meio da rolagem — o pulo que a pessoa vê. */
+  const mudouLargura = W !== hsLinha.larguraMedida;
+  const mudouAltura = hsLinha.alturaMedida > 0 &&
+    Math.abs(H - hsLinha.alturaMedida) / hsLinha.alturaMedida > LINHA.toleranciaDeAltura;
+  if (!mudouLargura && !mudouAltura && hsLinha.anim) return;
+
+  hsLinha.larguraMedida = W;
+  hsLinha.alturaMedida = H;
+
+  /* As coordenadas já vêm normalizadas: x em larguras de painel, y em frações
+     da altura. Converter é multiplicar — não há escala, nem viewBox esticado,
+     nem transform. Cada composição foi desenhada no formato em que vai ser
+     usada, então o que chega aqui já está certo para esta tela.
+
+     A `amplitude` recolhe o desenho em direção ao meio vertical sem mudar a
+     forma dele, e existe só como ajuste fino: em 1 vale o que foi desenhado. */
+  const meio = 0.5;
+  const emPixels = linhaComposicao(W, H).map(([x, y]) => [
+    x * W,
+    (meio + (y - meio) * LINHA.amplitude) * H
+  ]);
+  hsLinha.path.setAttribute('d', linhaCaminho(emPixels, LINHA.tensao));
+  hsLinha.svg.setAttribute('viewBox', `0 0 ${W * hsPanelCount} ${H}`);
+
+  const traco = Math.max(LINHA.espessuraMin,
+                Math.min(LINHA.espessuraMax, W / LINHA.espessuraDivisor));
+  hsLinha.svg.style.setProperty('--traco', traco.toFixed(2) + 'px');
+  hsLinha.svg.style.setProperty('--opacidade', String(LINHA.opacidade));
+  hsLinha.svg.style.setProperty('--comprimento',
+    hsLinha.path.getTotalLength().toFixed(0));
+
+  /* A classe é o que autoriza esconder o traço, e entra só aqui, com o
+     caminho já pronto. Sem este trecho a linha nasce inteira e visível — o
+     estado seguro. */
+  hsLinha.svg.classList.add('linha-viva');
+
+  if (PREFERE_MENOS_MOVIMENTO) { hsLinha.anim = null; return; }
+
+  hsLinha.anim = hsLinha.path.getAnimations()[0] || null;
+  if (hsLinha.anim) {
+    hsLinha.anim.pause();
+    // devolve o desenho ao ponto em que estava: sem isto, todo resize (e toda
+    // mexida na barra do navegador) apagaria a linha e recomeçaria do zero
+    hsLinhaDesenhar(hsLinha.prog);
+  }
+}
+
+
+/* =========================================================================
+   DESENHO — o quadro
+
+   `prog` é o mesmo 0..1 que move o trilho, então a linha e os painéis são
+   comandados pelo mesmo número e não têm como dessincronizar. A animação dura
+   1s de propósito: o progresso vira milissegundos direto, sem conta.
+   ========================================================================= */
+
+function hsLinhaDesenhar(prog){
+  if (!hsLinha) return;
+  hsLinha.prog = prog;
+  if (!hsLinha.anim) return;
+  const t = prog * 1000;
+  hsLinha.anim.currentTime = t < 0 ? 0 : (t > 1000 ? 1000 : t);
+}
 
 /* O pin vale em TODAS as larguras agora. Antes havia um desvio aqui que, no
    celular, limpava a altura e deixava o CSS trocar o efeito por rolagem
@@ -431,14 +840,23 @@ const EXTRA_PIN_VH = 0.2; // nº de telas extras de pausa antes do .stack começ
    desktop já tinha, então lá nada muda. */
 const VELOCIDADE_PAINEL = 1.58;   // px de painel por px de rolagem
 
+/* A altura é GUARDADA, e não lida de volta do elemento. Antes o hsUpdate
+   perguntava `hsOuter.offsetHeight` a cada quadro de scroll — e offsetHeight
+   é leitura de layout, das que obrigam o navegador a recalcular. O número já
+   é conhecido aqui, no instante em que o escrevemos; perguntar de volta era
+   pagar por uma informação que já estava na mão. */
+let hsAltura = 0;
+
 function hsLayout(){
+  hsLinhaLayout();   // o caminho é remontado junto com o layout do trilho
+
   const H = window.innerHeight;
   const percurso = (hsPanelCount - 1) * window.innerWidth;
   const rolagemHorizontal = percurso / VELOCIDADE_PAINEL;
 
   // + 1 tela de pin padrão + EXTRA_PIN_VH telas de pausa + a própria tela presa
-  hsOuter.style.height =
-    `${Math.round(rolagemHorizontal + H * (1 + EXTRA_PIN_VH) + H)}px`;
+  hsAltura = Math.round(rolagemHorizontal + H * (1 + EXTRA_PIN_VH) + H);
+  hsOuter.style.height = hsAltura + 'px';
 }
 
 /* Escreve em cada painel marcado com [data-progresso] quanto dele já
@@ -451,10 +869,64 @@ function hsLayout(){
      painel encostado na esquerda         -> 1
    Serve tanto pro pin do desktop quanto pro scroll horizontal nativo do
    mobile, porque nos dois casos é o painel que se move na tela. */
-const paineisComProgresso = Array.from(document.querySelectorAll('[data-progresso]'));
+/* A POSIÇÃO DO PAINEL É CALCULADA, NÃO MEDIDA — e é aqui que estava o pior
+   engarrafamento da página.
+
+   O `hsRender` faz duas coisas em sequência: ESCREVE o transform do trilho e
+   logo em seguida chamava esta função, que MEDIA `getBoundingClientRect()` dos
+   painéis. Ler o layout depois de escrever nele é o gatilho clássico do
+   "forced synchronous layout": o navegador é obrigado a parar tudo e
+   recalcular a página inteira ali mesmo, antes de devolver o número. E não
+   era uma vez por quadro — o lerp chama o hsRender de novo enquanto o trilho
+   não assenta, então na cauda de cada rolagem isso se repetia.
+
+   Só que a posição dos painéis não precisa ser perguntada ao navegador: ela é
+   uma conta de uma linha. Os painéis são irmãos de larguras iguais dentro de
+   um flex sem espaçamento, e o trilho anda só na horizontal:
+
+       esquerda do painel i = borda do trilho + i * largura - deslocamento
+
+   A borda e a largura só mudam quando a janela muda de tamanho, então são
+   medidas uma vez por resize (em `medirGeometriaDoTrilho`) e reaproveitadas.
+   O deslocamento é o `hsCurrent`, que já está na mão — é justamente o número
+   que acabamos de escrever.
+
+   Resultado: escrita e leitura deixam de se atropelar, e o quadro do scroll
+   horizontal não força mais nenhum recálculo de layout. */
+/* O índice é contado entre os PAINÉIS, não entre os filhos do trilho.
+
+   A diferença não é cosmética: o trilho tem outro filho além dos painéis — o
+   SVG da linha desenhada, que é absoluto e cobre o trilho inteiro. Contando
+   por `children`, ele virava o "painel 0", empurrava todos os índices em um e
+   a conta da posição saía inteira errada. O sintoma foi o "I DEVELOP" parar
+   de aparecer: com a posição errada, o painel era considerado fora da tela e
+   nunca recebia o --prog que revela as letras. */
+const paineisDoTrilho = Array.from(hsTrack.querySelectorAll(':scope > .hs-panel'));
+
+const paineisComProgresso = Array.from(document.querySelectorAll('[data-progresso]'))
+  .map((el) => ({ el, idx: paineisDoTrilho.indexOf(el) }))
+  .filter((p) => p.idx >= 0);
+
+let trilhoEsquerda = 0;      // borda esquerda do trilho, sem o transform
+let trilhoLarguraPainel = 0; // largura de um painel
+
+function medirGeometriaDoTrilho(){
+  const r = hsTrack.getBoundingClientRect();
+  // o trilho está deslocado de -hsCurrent; somando de volta, temos a borda "parada"
+  trilhoEsquerda = r.left + hsCurrent;
+
+  /* Mede um PAINEL, não o primeiro filho qualquer: o SVG da linha também é
+     filho do trilho e tem a largura do trilho inteiro. Medindo ele, a
+     "largura de um painel" saía cinco vezes maior. */
+  const primeiro = paineisDoTrilho[0];
+  trilhoLarguraPainel = primeiro
+    ? primeiro.getBoundingClientRect().width
+    : (window.innerWidth || 1);
+}
 
 function atualizarProgressoPaineis(){
   if (!paineisComProgresso.length) return;
+  if (!trilhoLarguraPainel) medirGeometriaDoTrilho();
 
   const largura = window.innerWidth || 1;
 
@@ -469,8 +941,18 @@ function atualizarProgressoPaineis(){
      --dur de cada flor no HTML estão calibrados nessa escala. */
   /* 1.35 e nao 1.0: com o percurso curto tudo acontecia num tranco, porque
      o mesmo efeito passava a caber em menos scroll. Esticado, cada florada
-     se espalha por mais caminho — e ainda fecha por volta de prog .78, que e
-     quando o painel acaba de encher a tela. */
+     se espalha por mais caminho.
+
+     A RÉGUA, para quem for calibrar --ini/--dur no HTML: com PERCURSO 1.35, a
+     fração do painel que já entrou na tela é 1,35 x prog. Ou seja
+
+         prog .20 -> 27% do painel visível
+         prog .40 -> 54%
+         prog .74 -> o painel ENCHE a tela
+         prog 1.0 -> o painel já saiu 35% pela esquerda
+
+     Hoje as flores vão de .10 (rosa nascendo) a .94 (lilás fechando), com
+     .50s de florada cada uma. */
   const PERCURSO = 1.35;
 
   /* ESCREVER --prog É A OPERAÇÃO CARA DESTA PÁGINA.
@@ -485,17 +967,21 @@ function atualizarProgressoPaineis(){
 
      Não dá pra tirar as flores nem as letras: são o efeito. Dá pra escrever
      menos, e é o que as duas guardas abaixo fazem. */
-  for (const painel of paineisComProgresso) {
-    const rect = painel.getBoundingClientRect();
+  for (const item of paineisComProgresso) {
+    const painel = item.el;
+
+    // a mesma esquerda que o getBoundingClientRect devolvia, sem perguntar
+    const esquerda = trilhoEsquerda + item.idx * trilhoLarguraPainel - hsCurrent;
+    const direita  = esquerda + trilhoLarguraPainel;
 
     /* 1. PAINEL LONGE DA TELA NÃO PRECISA DE CONTA NENHUMA.
        São dois painéis, e no scroll horizontal quase nunca os dois estão à
        vista ao mesmo tempo — escrever no que está fora é trabalho jogado
        fora. A folga de meia tela garante que ele já chegue com o valor certo
        antes de aparecer. */
-    if (rect.right < -largura * 0.5 || rect.left > largura * 1.5) continue;
+    if (direita < -largura * 0.5 || esquerda > largura * 1.5) continue;
 
-    let p = (largura - rect.left) / (largura * PERCURSO);
+    let p = (largura - esquerda) / (largura * PERCURSO);
     p = Math.min(1, Math.max(0, p));
 
     /* 2. SÓ ESCREVE SE MUDOU O BASTANTE PRA SE VER.
@@ -532,6 +1018,7 @@ function hsRender(){
     hsCurrent = hsTarget;
     hsTrack.style.transform = `translate3d(${-hsCurrent}px, 0, 0)`;
     atualizarProgressoPaineis();
+    hsLinhaDesenhar(hsPercurso ? hsCurrent / hsPercurso : 0);
     hsTicking = false;
     return;
   }
@@ -539,6 +1026,7 @@ function hsRender(){
   hsCurrent += (hsTarget - hsCurrent) * 0.12;
   hsTrack.style.transform = `translate3d(${-hsCurrent}px, 0, 0)`;
   atualizarProgressoPaineis();
+  hsLinhaDesenhar(hsPercurso ? hsCurrent / hsPercurso : 0);
 
   if (Math.abs(hsTarget - hsCurrent) > 0.5) {
     requestAnimationFrame(hsRender);
@@ -546,19 +1034,22 @@ function hsRender(){
     hsCurrent = hsTarget;
     hsTrack.style.transform = `translate3d(${-hsCurrent}px, 0, 0)`;
     atualizarProgressoPaineis();
+    hsLinhaDesenhar(hsPercurso ? hsCurrent / hsPercurso : 0);
     hsTicking = false;
   }
 }
 
 function hsUpdate(){
   const rect = hsOuter.getBoundingClientRect();
-  const total = hsOuter.offsetHeight - window.innerHeight;
+  // hsAltura no lugar de hsOuter.offsetHeight: mesmo número, sem leitura de layout
+  const total = hsAltura - window.innerHeight;
 
   // reserva (1 + EXTRA_PIN_VH) telas pro pin/pausa, sem esticar o ritmo do scroll horizontal
   const horizontalTotal = Math.max(total - window.innerHeight * (1 + EXTRA_PIN_VH), 1);
   const progress = Math.min(Math.max(-rect.top / horizontalTotal, 0), 1);
 
-  hsTarget = progress * (hsPanelCount - 1) * window.innerWidth;
+  hsPercurso = (hsPanelCount - 1) * window.innerWidth;
+  hsTarget = progress * hsPercurso;
 
   if (!hsTicking) {
     hsTicking = true;
@@ -567,21 +1058,29 @@ function hsUpdate(){
 }
 
 hsLayout();
+medirGeometriaDoTrilho();
 hsUpdate();
 atualizarProgressoPaineis();
-
-window.addEventListener('scroll', hsUpdate, { passive: true });
 
 /* O .hs-sticky não rola mais sozinho em largura nenhuma — quem move os
    painéis é sempre o pin, comandado pelo scroll da janela. O ouvinte de
    scroll dele e a dica "arraste →" saíram junto com o fallback: não há mais
    arrasto lateral pra ouvir, e avisar pra arrastar seria mentira. */
+Agenda.scroll(hsUpdate);
 
-window.addEventListener('scroll', atualizarProgressoPaineis, { passive: true });
-window.addEventListener('resize', atualizarProgressoPaineis);
-window.addEventListener('resize', () => {
+/* Aqui havia um SEGUNDO ouvinte de scroll chamando `atualizarProgressoPaineis`
+   direto, sem passar por requestAnimationFrame nenhum — ou seja, medindo o
+   layout a cada evento de scroll, que chega bem mais vezes que quadro. E era
+   redundante: o hsUpdate agenda o hsRender, e o hsRender já chama essa mesma
+   função. Saiu.
+
+   As duas medidas do trilho são refeitas no resize, que é a única coisa capaz
+   de mudá-las. */
+Agenda.resize(() => {
   hsLayout();
+  medirGeometriaDoTrilho();
   hsUpdate();
+  atualizarProgressoPaineis();
 });
 
 
@@ -754,7 +1253,7 @@ window.addEventListener('resize', () => {
   }
 
   posicionar();
-  window.addEventListener('resize', posicionar);
+  Agenda.resize(posicionar);
 
   // a medida muda quando a fonte real entra no lugar da de fallback
   if (document.fonts) document.fonts.ready.then(posicionar);
@@ -786,9 +1285,14 @@ window.addEventListener('resize', () => {
      recalculava a própria posição a cada movimento do mouse. Este observer é
      a chave geral: só liga o olho quando ele realmente aparece. */
   let eyeVisivel = false;
+  /* preenchido mais abaixo pelo bloco do piscar; fica aqui em cima porque o
+     observer precisa avisá-lo, e o observer é declarado antes */
+  let aoMudarVisibilidadeDoOlho = null;
+
   new IntersectionObserver((entries) => {
     eyeVisivel = entries[0].isIntersecting;
     if (eyeVisivel) medirOlho();
+    if (aoMudarVisibilidadeDoOlho) aoMudarVisibilidadeDoOlho();
   }, { threshold: 0 }).observe(eyeO);
 
   /* ---------- Piscar ---------- */
@@ -810,7 +1314,21 @@ window.addEventListener('resize', () => {
       eyeLidBottom.animate(blinkKeyframes, { duration: BLINK_DURATION_MS, easing: 'ease-in-out' });
     }
 
-    setInterval(triggerBlink, BLINK_REPEAT_MS);
+    /* setInterval seria um timer eterno para um olho que passa quase a página
+       inteira fora da tela — ele acordava o main thread a cada 4s pra
+       descobrir que não tinha nada a fazer, inclusive com a aba em segundo
+       plano. Reagendando só depois de cada piscada, e só enquanto o olho está
+       à vista, o timer some junto com o motivo dele. */
+    let blinkTimer = 0;
+
+    function agendarPiscada(){
+      clearTimeout(blinkTimer);
+      if (!eyeVisivel) return;
+      blinkTimer = setTimeout(() => { triggerBlink(); agendarPiscada(); }, BLINK_REPEAT_MS);
+    }
+
+    aoMudarVisibilidadeDoOlho = agendarPiscada;
+    document.addEventListener('visibilitychange', agendarPiscada);
   }
 
   /* ---------- Pupila seguindo o cursor (sem sair do olho) ---------- */
@@ -826,8 +1344,8 @@ window.addEventListener('resize', () => {
     olhoCy = rect.top  + rect.height / 2;
   }
 
-  window.addEventListener('scroll', () => { if (eyeVisivel) medirOlho(); }, { passive: true });
-  window.addEventListener('resize', () => { if (eyeVisivel) medirOlho(); });
+  Agenda.scroll(() => { if (eyeVisivel) medirOlho(); });
+  Agenda.resize(() => { if (eyeVisivel) medirOlho(); });
 
   if (eyeLook) {
 
@@ -897,8 +1415,8 @@ window.addEventListener('resize', () => {
      devicon) costumam chegar DEPOIS dele, e é a fonte que define a largura
      real do texto. Medindo cedo demais, a velocidade saía calculada em cima
      da fonte de fallback e cada linha andava num ritmo diferente. */
-  window.addEventListener('load', applySpeed);
-  window.addEventListener('resize', applySpeed);
+  window.addEventListener('load', applySpeed, { once: true });
+  Agenda.resize(applySpeed);
   if (document.fonts) document.fonts.ready.then(applySpeed);
   applySpeed();
 })();
@@ -1061,13 +1579,11 @@ window.addEventListener('resize', () => {
     posicionarPalavras(p);
   }
 
-  window.addEventListener('scroll', () => {
-    if (agendado) return;
-    agendado = true;
-    requestAnimationFrame(medir);
-  }, { passive: true });
-
-  window.addEventListener('resize', medir);
+  /* a trava `agendado` continua onde estava só porque `medir` também é
+     chamada solta (nas tentativas iniciais); quem coalesce o scroll agora é a
+     Agenda */
+  Agenda.scroll(medir);
+  Agenda.resize(medir);
 
   /* A animação só existe depois que o CSS da .bio-scrub foi aplicado, o que
      não acontece no mesmo instante em que a classe entra. Estas tentativas

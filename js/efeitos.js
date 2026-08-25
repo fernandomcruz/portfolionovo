@@ -30,6 +30,25 @@
   const lerp  = (a, b, t) => a + (b - a) * t;
   const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
+  /* A AGENDA VEM DO js/script.js — um ouvinte de scroll e um de resize para o
+     site inteiro, em vez de um par por módulo. Ver o comentário longo lá.
+
+     O plano B existe porque este arquivo se declara aditivo: se o script.js
+     não tiver carregado, cada módulo volta a registrar o seu próprio ouvinte e
+     nada aqui deixa de funcionar. */
+  const Agenda = window.Agenda || {
+    scroll(fn){
+      let esperando = false;
+      window.addEventListener('scroll', () => {
+        if (esperando) return;
+        esperando = true;
+        requestAnimationFrame(() => { esperando = false; fn(); });
+      }, { passive: true });
+      return fn;
+    },
+    resize(fn){ window.addEventListener('resize', fn); return fn; }
+  };
+
   /* "a cortina já saiu?" — vários efeitos só devem começar depois disso, ou
      rodam escondidos atrás do preloader e a pessoa nunca chega a ver.
      O listener precisa ser registrado AQUI, antes do módulo do preloader:
@@ -144,23 +163,38 @@
     const fill = document.getElementById('scrollProgressFill');
     if (!fill) return;
 
-    let agendado = false;
+    /* A ALTURA DO DOCUMENTO É GUARDADA, NÃO PERGUNTADA A CADA QUADRO.
+
+       `document.documentElement.scrollHeight` é leitura de layout — daquelas
+       que obrigam o navegador a resolver a página inteira antes de responder.
+       Isso acontecia em TODO quadro de rolagem, e para um número que só muda
+       quando a janela muda de tamanho ou quando o trilho horizontal é
+       remedido.
+
+       Guardado aqui, o quadro de scroll vira uma divisão e uma escrita de
+       transform: nenhuma leitura de layout. A altura é refeita no resize —
+       que é quando o hsLayout também reescreve a altura da seção "Sobre", e
+       por isso a fila do resize recalcula depois dela. */
+    let alturaRolavel = 0;
+
+    function medirAltura(){
+      alturaRolavel = document.documentElement.scrollHeight - window.innerHeight;
+    }
 
     function pintar(){
-      agendado = false;
-      const total = document.documentElement.scrollHeight - window.innerHeight;
-      const p = total > 0 ? clamp(window.scrollY / total, 0, 1) : 0;
+      const p = alturaRolavel > 0 ? clamp(window.scrollY / alturaRolavel, 0, 1) : 0;
       fill.style.transform = `scaleX(${p})`;
     }
 
-    window.addEventListener('scroll', () => {
-      if (agendado) return;
-      agendado = true;
-      requestAnimationFrame(pintar);
-    }, { passive: true });
+    Agenda.scroll(pintar);
+    Agenda.resize(() => { medirAltura(); pintar(); });
 
-    window.addEventListener('resize', pintar);
+    /* a altura final só existe depois que as fontes assentam e o hsLayout
+       roda; até lá, algumas conferências baratas */
+    medirAltura();
     pintar();
+    window.addEventListener('load', () => { medirAltura(); pintar(); }, { once: true });
+    if (document.fonts) document.fonts.ready.then(() => { medirAltura(); pintar(); });
   })();
 
 
@@ -261,8 +295,8 @@
     }
 
     const invalidar = () => { precisaMedir = true; };
-    window.addEventListener('scroll', invalidar, { passive: true });
-    window.addEventListener('resize', invalidar);
+    Agenda.scroll(invalidar);
+    Agenda.resize(invalidar);
     document.getElementById('menu-toggle')?.addEventListener('click', () => {
       // o menu leva ~1.4s pra assentar; remede quando os ícones pararem
       setTimeout(invalidar, 1500);
@@ -361,13 +395,8 @@
       }
     }
 
-    let agendado = false;
-    window.addEventListener('scroll', () => {
-      if (agendado) return;
-      agendado = true;
-      requestAnimationFrame(() => { agendado = false; conferir(); });
-    }, { passive: true });
-    window.addEventListener('resize', conferir);
+    Agenda.scroll(conferir);
+    Agenda.resize(conferir);
     setTimeout(conferir, 1200);
 
     if ('IntersectionObserver' in window) {
@@ -420,7 +449,7 @@
       anims = trilhas.flatMap((t) => t.getAnimations());
     }
 
-    window.addEventListener('resize', () => { anims = null; });
+    Agenda.resize(() => { anims = null; });
     if (document.fonts) document.fonts.ready.then(() => { anims = null; });
 
     function definirRitmo(v){
@@ -442,7 +471,7 @@
       rodando = false;
     }
 
-    window.addEventListener('scroll', () => {
+    Agenda.scroll(() => {
       const delta = window.scrollY - ultimoY;
       ultimoY = window.scrollY;
 
@@ -508,13 +537,8 @@
       }
     }
 
-    let agendado = false;
-    window.addEventListener('scroll', () => {
-      if (agendado) return;
-      agendado = true;
-      requestAnimationFrame(() => { agendado = false; conferir(); });
-    }, { passive: true });
-    window.addEventListener('resize', conferir);
+    Agenda.scroll(conferir);
+    Agenda.resize(conferir);
 
     if ('IntersectionObserver' in window) {
       const io = new IntersectionObserver((entries) => {
@@ -602,13 +626,8 @@
     }
 
     // caminhos independentes do observer
-    let agendado = false;
-    window.addEventListener('scroll', () => {
-      if (agendado || feito) return;
-      agendado = true;
-      requestAnimationFrame(() => { agendado = false; if (noCampoDeVisao()) revelar(); });
-    }, { passive: true });
-    window.addEventListener('resize', () => { if (noCampoDeVisao()) revelar(); });
+    Agenda.scroll(() => { if (!feito && noCampoDeVisao()) revelar(); });
+    Agenda.resize(() => { if (!feito && noCampoDeVisao()) revelar(); });
     // caso a seção já esteja na tela no carregamento (página curta, link direto)
     setTimeout(() => { if (noCampoDeVisao()) revelar(); }, 1200);
 
@@ -697,14 +716,8 @@
       }
     }
 
-    let agendado = false;
-    window.addEventListener('scroll', () => {
-      if (agendado) return;
-      agendado = true;
-      requestAnimationFrame(() => { agendado = false; conferir(); });
-    }, { passive: true });
-
-    window.addEventListener('resize', conferir);
+    Agenda.scroll(conferir);
+    Agenda.resize(conferir);
     conferir();
 
     /* O observer continua, mas agora como atalho e não como fonte da verdade:

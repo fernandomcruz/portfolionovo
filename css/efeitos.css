@@ -417,3 +417,82 @@ a, button, [role="button"], input, textarea, select, summary,
   .menu-panel .menu-divider{ transform: scaleX(1); }
 
 }
+
+
+/* =========================================================================
+   10. FOCO DE TECLADO
+
+   Não havia NENHUM estilo de foco no site. Quem navega de Tab — por
+   preferência, por lesão, com leitor de tela — não tinha como saber onde
+   estava: o contorno padrão do navegador some assim que qualquer regra de
+   `outline` ou de aparência entra no caminho, e os links do menu e os cubos
+   de contato dependiam só de `:hover`, que teclado nenhum dispara.
+
+   Tudo aqui está sob `:focus-visible`, e isso é o ponto: o navegador só liga
+   esse estado quando o foco veio do TECLADO. Clicar com o mouse não acende
+   nada. Ou seja, para quem usa mouse — que é como o site foi desenhado e
+   conferido — a aparência é exatamente a mesma de antes, pixel por pixel.
+   ========================================================================= */
+
+:where(a, button, [role="button"], input, textarea, select, summary):focus-visible{
+  outline: 3px solid var(--lightgreen);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* o botão do menu já é um quadrado com borda: o anel fica por fora dela */
+.menu-toggle:focus-visible{ outline-offset: 5px; }
+
+/* AS ANIMAÇÕES DE HOVER PASSAM A VALER TAMBÉM NO FOCO DE TECLADO.
+
+   Não é enfeite: nos links do menu é o `:hover` que sobe a letra revelada, e
+   no cubo de contato é ele que gira a face de cima — a que traz o @ do
+   Instagram, o nome no LinkedIn, o e-mail. Sem isto, quem navega por teclado
+   nunca via essa informação. */
+.text-reveal:focus-visible{ color: var(--tr-hover-color); }
+.text-reveal[data-direction="up"]:focus-visible .tr-char{ transform: translateY(-1em); }
+.text-reveal[data-direction="down"]:focus-visible .tr-char{ transform: translateY(1em); }
+
+.button-icon:focus-visible{ border-color: var(--lightgreen); }
+.button-icon:focus-visible .cube{ transform: rotateX(90deg); }
+
+.ms-icon:focus-visible{ background-color: var(--lightgreen); }
+.ms-icon:focus-visible i{ color: var(--bg); }
+
+.cv-button:focus-visible .circle{ width: 100%; }
+.cv-button:focus-visible .circle .icon.arrow{ background: var(--bg); transform: translate(1rem, 0); }
+.cv-button:focus-visible .button-text{ color: var(--bg); }
+
+.pj-link:focus-visible{ background-color: rgba(217, 255, 0, 0.06); }
+.pj-link:focus-visible .pj-nome{ transform: translateX(18px); color: var(--lightgreen); }
+.pj-link:focus-visible .pj-seta{
+  transform: rotate(45deg) translate(4px, -4px);
+  border-color: var(--lightgreen);
+}
+.pj-link:focus-visible .pj-arte{ clip-path: inset(0 0 0 0); transform: translateX(0); }
+
+
+/* =========================================================================
+   11. AS ONDAS DO MENU SAEM DO ORÇAMENTO ENQUANTO O MENU ESTÁ FECHADO
+
+   São 16 linhas × 2 trilhas = 32 SVGs, mais os invólucros: perto de 100
+   elementos vivendo dentro de um overlay que começa fechado e que na maior
+   parte da visita continua fechado.
+
+   As ANIMAÇÕES já estavam pausadas (regra no estilo.css). O que continuava
+   sendo pago era o layout: `visibility: hidden` impede pintar, mas não
+   impede o navegador de medir e posicionar os cem elementos a cada
+   recálculo. `content-visibility: hidden` pula a subárvore inteira — layout
+   e pintura.
+
+   Por que é seguro AQUI e não seria em outros pontos do menu: pular a
+   subárvore descarta o estilo computado dos filhos, e transição precisa de
+   um estado inicial computado para partir. As fotos, os links e os ícones
+   entram com `transition` escalonada — neles isto quebraria a entrada. As
+   ondas não têm transição nenhuma: só animações infinitas, que recomeçam
+   sozinhas. Por isso a regra é apertada no .menu-waves e não no painel.
+   ========================================================================= */
+
+.menu-panel:not(.open) .menu-waves{
+  content-visibility: hidden;
+}

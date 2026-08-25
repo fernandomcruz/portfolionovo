@@ -5,20 +5,74 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fernando</title>
 
-  <!-- ===================== Fontes ===================== -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@100..800&family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Changa+One:ital@0;1&family=Exo+2:ital,wght@0,100..900;1,100..900&family=Fira+Sans+Extra+Condensed:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Galada&family=Merriweather+Sans:ital,wght@0,300..800;1,300..800&family=Nosifer&family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Passion+One:wght@400;700;900&family=Work+Sans:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+  <!-- ===================== Fontes =====================
+       LOCAIS, e não mais do Google. O motivo é o caminho crítico: antes eram
+       DOIS domínios em série — o navegador baixava o CSS de
+       fonts.googleapis.com para só então descobrir a URL da fonte em
+       fonts.gstatic.com e abrir uma SEGUNDA conexão. Dois DNS, dois TLS, duas
+       viagens, tudo isso bloqueando a primeira pintura.
 
-  <!-- ===================== Ícones (Stack) ===================== -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/devicons/devicon@2.15.1/devicon.min.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+       Servidas daqui, as fontes saem da mesma conexão que já está aberta para
+       o HTML, e o `preload` abaixo as pede no primeiro instante do parse, em
+       vez de esperar o CSS ser baixado e o layout descobrir que precisa delas.
+
+       Saiu junto a segunda folha do Google, que trazia NOVE famílias — Changa
+       One, Exo 2, Fira Sans Extra Condensed, Galada, Merriweather Sans,
+       Nosifer, Open Sans, Passion One e Work Sans. Conferi uma a uma: nenhuma
+       aparece em regra alguma do CSS. Eram 76 KB de folha render-blocking para
+       fonte que nunca foi usada. -->
+  <link rel="preload" href="assets/fonts/spacegrotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/jetbrainsmono-latin.woff2" as="font" type="font/woff2" crossorigin>
+
+  <!-- inline, e não em arquivo: são 1,4 KB e assim o @font-face já existe no
+       primeiro quadro de parse, sem custar uma requisição a mais.
+       O recorte latin-ext continua declarado com o seu unicode-range: ele só
+       é baixado se aparecer um caractere que o latin não cobre — o que hoje
+       não acontece, então na prática ele nunca é pedido. -->
+  <style>
+    @font-face{
+      font-family:'JetBrains Mono'; font-style:normal; font-weight:100 800; font-display:swap;
+      src:url(assets/fonts/jetbrainsmono-latin.woff2) format('woff2');
+      unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+    }
+    @font-face{
+      font-family:'JetBrains Mono'; font-style:normal; font-weight:100 800; font-display:swap;
+      src:url(assets/fonts/jetbrainsmono-latin-ext.woff2) format('woff2');
+      unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+    }
+    @font-face{
+      font-family:'Space Grotesk'; font-style:normal; font-weight:300 700; font-display:swap;
+      src:url(assets/fonts/spacegrotesk-latin.woff2) format('woff2');
+      unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+    }
+    @font-face{
+      font-family:'Space Grotesk'; font-style:normal; font-weight:300 700; font-display:swap;
+      src:url(assets/fonts/spacegrotesk-latin-ext.woff2) format('woff2');
+      unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+    }
+  </style>
 
   <!-- ===================== Estilo ===================== -->
   <link rel="stylesheet" href="css/estilo.css">
   <link rel="stylesheet" href="css/efeitos.css">
-  <link rel="icon" type="image/png" href="assets/icone.png">
+  <!-- ícones: mesmas fontes de sempre (devicon + Font Awesome), recortadas
+       para os 21 glifos que o site usa. Ver o cabeçalho de css/icones.css —
+       eram 893 KB vindos de dois CDNs, agora são 6 KB daqui. -->
+  <link rel="stylesheet" href="css/icones.css">
+  <link rel="icon" type="image/png" href="assets/icone-96.png">
+
+  <!-- ===================== Scripts =====================
+       No <head> com `defer`, e não no fim do <body>. `defer` já garante que
+       eles só rodam depois do HTML montado — e na mesma ordem em que estão
+       aqui, que é a ordem de que o site depende (script.js registra o ouvinte
+       de `site:pronto` antes de efeitos.js disparar o evento).
+       A diferença é a DESCOBERTA: aqui o navegador vê os quatro arquivos no
+       primeiro instante e baixa os quatro em paralelo com o parse, em vez de
+       só descobri-los depois de atravessar 58 KB de HTML. -->
+  <script defer src="js/typed.umd.js"></script>
+  <script defer src="js/assinatura.js"></script>
+  <script defer src="js/script.js"></script>
+  <script defer src="js/efeitos.js"></script>
 </head>
 <body>
 
@@ -257,18 +311,25 @@
 
     <div class="menu-content">
 
+      <!-- As oito são WebP de 520px, e não mais JPEG de 960/1024px. Elas nunca
+           são exibidas com mais de 260x330 CSS, então 520 já é o dobro do
+           necessário — cobre tela retina sem sobra. Somadas, caíram de 829 KB
+           para 249 KB.
+           width/height explícitos: o CSS já fixa a caixa em 260x330, mas com
+           os atributos o navegador conhece a proporção antes mesmo do CSS
+           chegar, e a coluna nunca se reorganiza. -->
       <div class="menu-photos" id="menu-photos">
         <div class="menu-photo-col">
-          <img decoding="async" data-src="assets/euterno.jpeg" alt="" data-depth="34" style="--rot: -3deg;">
-          <img decoding="async" data-src="assets/eueminhavida.jpeg" alt="" data-depth="46" style="--rot: 2deg;">
-          <img decoding="async" data-src="assets/eudebaixo.jpeg" alt="" data-depth="58" style="--rot: -2deg;">
-          <img decoding="async" data-src="assets/eumaisnovo.jpeg" alt="" data-depth="70" style="--rot: 3deg;">
+          <img decoding="async" width="520" height="693" data-src="assets/euterno.webp" alt="" data-depth="34" style="--rot: -3deg;">
+          <img decoding="async" width="520" height="693" data-src="assets/eueminhavida.webp" alt="" data-depth="46" style="--rot: 2deg;">
+          <img decoding="async" width="520" height="694" data-src="assets/eudebaixo.webp" alt="" data-depth="58" style="--rot: -2deg;">
+          <img decoding="async" width="520" height="650" data-src="assets/eumaisnovo.webp" alt="" data-depth="70" style="--rot: 3deg;">
         </div>
         <div class="menu-photo-col offset">
-          <img decoding="async" data-src="assets/pc.jpeg" alt="" data-depth="40" style="--rot: 3deg;">
-          <img decoding="async" data-src="assets/eublusabranca.jpeg" alt="" data-depth="52" style="--rot: -3deg;">
-          <img decoding="async" data-src="assets/familia.jpeg" alt="" data-depth="64" style="--rot: 2deg;">
-          <img decoding="async" data-src="assets/eublusapreta.jpeg" alt="" data-depth="76" style="--rot: -2deg;">
+          <img decoding="async" width="520" height="693" data-src="assets/pc.webp" alt="" data-depth="40" style="--rot: 3deg;">
+          <img decoding="async" width="520" height="693" data-src="assets/eublusabranca.webp" alt="" data-depth="52" style="--rot: -3deg;">
+          <img decoding="async" width="520" height="693" data-src="assets/familia.webp" alt="" data-depth="64" style="--rot: 2deg;">
+          <img decoding="async" width="520" height="693" data-src="assets/eublusapreta.webp" alt="" data-depth="76" style="--rot: -2deg;">
         </div>
       </div>
 
@@ -362,7 +423,7 @@
                  crescimento. O --ini é o ponto do percurso em que cada flor
                  aparece — sempre depois de já estar em cena. -->
             <div class="jardim" aria-hidden="true">
-              <div class="flor flor--rosa" data-ancora="I,162,-78" style="--tam:290px; --ini:.10; --dur:.34s;">
+              <div class="flor flor--rosa" data-ancora="I,162,-78" style="--tam:290px; --ini:.10; --dur:.50s;">
                 <svg viewBox="-60 -60 120 120" aria-hidden="true">
                   <g transform="rotate(0.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
                   <g transform="rotate(72.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
@@ -372,7 +433,7 @@
                   <circle class="miolo" cx="0" cy="0" r="15"/>
                 </svg>
               </div>
-              <div class="flor flor--lilas" data-ancora="N-dir,0,-64" style="--tam:220px; --ini:.44; --dur:.34s;">
+              <div class="flor flor--lilas" data-ancora="N-dir,0,-64" style="--tam:220px; --ini:.44; --dur:.50s;">
                 <svg viewBox="-60 -60 120 120" aria-hidden="true">
                   <g transform="rotate(0.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
                   <g transform="rotate(72.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
@@ -382,7 +443,7 @@
                   <circle class="miolo" cx="0" cy="0" r="15"/>
                 </svg>
               </div>
-              <div class="flor flor--amarela" data-ancora="S-esq,-26,112" style="--tam:250px; --ini:.20; --dur:.34s;">
+              <div class="flor flor--amarela" data-ancora="S-esq,-26,112" style="--tam:250px; --ini:.20; --dur:.50s;">
                 <svg viewBox="-60 -60 120 120" aria-hidden="true">
                   <g transform="rotate(0.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
                   <g transform="rotate(72.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
@@ -392,7 +453,7 @@
                   <circle class="miolo" cx="0" cy="0" r="15"/>
                 </svg>
               </div>
-              <div class="flor flor--vermelha" data-ancora="N-esq,-26,112" style="--tam:225px; --ini:.38; --dur:.34s;">
+              <div class="flor flor--vermelha" data-ancora="N-esq,-26,112" style="--tam:225px; --ini:.38; --dur:.50s;">
                 <svg viewBox="-60 -60 120 120" aria-hidden="true">
                   <g transform="rotate(0.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
                   <g transform="rotate(72.0)"><path class="petala" d="M0,-12 C-16,-14 -26,-28 -26,-40 C-26,-51 -15,-57 0,-57 C15,-57 26,-51 26,-40 C26,-28 16,-14 0,-12 Z"/></g>
@@ -520,7 +581,10 @@
               <span class="pj-tipo">Site institucional</span>
               <span class="pj-seta" aria-hidden="true"></span>
               <span class="pj-arte" aria-hidden="true">
-                <img src="assets/LDsite.png" alt="" loading="lazy" decoding="async">
+                <img src="assets/LDsite-1200.webp"
+                     srcset="assets/LDsite-600.webp 600w, assets/LDsite-1200.webp 1200w"
+                     sizes="(hover: none) 90vw, (max-width: 860px) 90vw, 260px"
+                     width="1200" height="615" alt="" loading="lazy" decoding="async">
               </span>
             </a>
           </li>
@@ -531,7 +595,10 @@
               <span class="pj-tipo">Landing page</span>
               <span class="pj-seta" aria-hidden="true"></span>
               <span class="pj-arte" aria-hidden="true">
-                <img src="assets/portifoliosite.png" alt="" loading="lazy" decoding="async">
+                <img src="assets/portifoliosite-1200.webp"
+                     srcset="assets/portifoliosite-600.webp 600w, assets/portifoliosite-1200.webp 1200w"
+                     sizes="(hover: none) 90vw, (max-width: 860px) 90vw, 260px"
+                     width="1200" height="614" alt="" loading="lazy" decoding="async">
               </span>
             </a>
           </li>
@@ -542,7 +609,10 @@
               <span class="pj-tipo">Portfólio</span>
               <span class="pj-seta" aria-hidden="true"></span>
               <span class="pj-arte" aria-hidden="true">
-                <img src="assets/projetosite.png" alt="" loading="lazy" decoding="async">
+                <img src="assets/projetosite-1200.webp"
+                     srcset="assets/projetosite-600.webp 600w, assets/projetosite-1200.webp 1200w"
+                     sizes="(hover: none) 90vw, (max-width: 860px) 90vw, 260px"
+                     width="1200" height="615" alt="" loading="lazy" decoding="async">
               </span>
             </a>
           </li>
@@ -553,7 +623,10 @@
               <span class="pj-tipo">C.A.O.S &middot; IFSP</span>
               <span class="pj-seta" aria-hidden="true"></span>
               <span class="pj-arte" aria-hidden="true">
-                <img src="assets/caos-smartband.jpg" alt="" loading="lazy" decoding="async">
+                <img src="assets/caos-smartband-1200.webp"
+                     srcset="assets/caos-smartband-600.webp 600w, assets/caos-smartband-1200.webp 1200w"
+                     sizes="(hover: none) 90vw, (max-width: 860px) 90vw, 260px"
+                     width="1200" height="615" alt="" loading="lazy" decoding="async">
               </span>
             </a>
           </li>
@@ -882,9 +955,11 @@
              "Sobre mim" começa logo onde ele some. Assim a foto pertence ao
              bloco de texto em vez de ficar apoiada em cima dele. -->
         <figure class="bio-retrato">
+          <!-- 580px de largura: o dobro do maior tamanho em que ela aparece
+               (clamp(200px, 23vw, 290px)). Era 760px. -->
           <img src="assets/fernando-recorte.webp"
                alt="Fernando de braços cruzados, de moletom branco"
-               width="760" height="1130" loading="lazy" decoding="async">
+               width="580" height="862" loading="lazy" decoding="async">
         </figure>
 
         <span class="contato-label">Sobre mim</span>
@@ -947,12 +1022,8 @@
     <p class="direitos">© 2025 Fernando Marques da Cruz. Todos os direitos reservados.</p>
   </section>
 
-  <!-- ===================== Scripts ===================== -->
-  <script src="https://unpkg.com/typed.js@2.0.16/dist/typed.umd.js"></script>
-
-  <!-- assinatura animada (dados + motor, arquivo único) -->
-  <script src="js/assinatura.js"></script>
-  <script src="js/script.js"></script>
-  <script src="js/efeitos.js"></script>
+  <!-- Os scripts moraram aqui até agora. Subiram para o <head> com `defer`:
+       mesma ordem, mesmo momento de execução, só que descobertos no começo do
+       parse em vez de no fim. Ver o comentário lá em cima. -->
 </body>
 </html>

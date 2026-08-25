@@ -78,10 +78,21 @@ body{
   position: relative;
   width: 100%;
   height: 100vh;
+  /* svh = a MENOR altura que a tela pode ter, ou seja, com a barra do
+     navegador aparecendo. É a mesma unidade que o .hs-sticky já usava, e pelo
+     mesmo motivo: com `vh` puro o celular usa a altura GRANDE (barra
+     escondida), então parte do hero — justamente o texto que se digita, que
+     fica no rodapé da coluna — nascia abaixo da dobra e só aparecia depois de
+     rolar. Pior: a barra some e volta durante a rolagem, e com `vh` o hero
+     mudava de altura no meio do gesto.
+     No desktop svh e vh são o mesmo número, então lá nada muda. Navegador
+     antigo ignora a linha e fica com o vh acima. */
+  height: 100svh;
   min-height: 480px;
   overflow: hidden;
   z-index: 1;
 }
+
 
 .hero .fixed{
   flex: 1 1 auto;
@@ -195,7 +206,18 @@ body{
    Ou seja: este valor não é só o tamanho da faixa, é o quanto a onda é
    esticada na vertical. */
 .wave-cap{
-  --altura-onda: 354px;
+  /* O TAMANHO DA ONDA MORA AQUI, E SÓ AQUI.
+
+     Vale registrar, porque não é óbvio e já custou tempo: mexer no
+     MAX_AMPLITUDE do js/script.js NÃO aumenta a onda. Lá o TOP_PAD é igual ao
+     MAX_AMPLITUDE, então o viewBox cresce no mesmo passo que a crista e a
+     proporção fica idêntica — a onda já ocupa 99,2% da altura do viewBox com
+     qualquer valor. Como o SVG tem preserveAspectRatio="none", ele é esticado
+     até a altura desta faixa, e é ESTA medida que decide o tamanho na tela.
+
+     De 354px para 480px: a crista passa de 351px para 476px de altura real,
+     uma onda bem mais alta na transição entre o hero e a seção branca. */
+  --altura-onda: 480px;
 
   position: relative;
   margin-top: calc(var(--altura-onda) * -1);
@@ -212,7 +234,11 @@ body{
    volta a ter a mansidão que tem no desktop e a transição para de ocupar
    meia tela. */
 @media (max-width: 900px){
-  .wave-cap{ --altura-onda: clamp(190px, 34vw, 290px); }
+  /* Cresce junto com o desktop, mas com o freio de sempre: a onda é 1,5 ciclos
+     na largura da tela, então num celular ela já é curta na horizontal e altura
+     demais a transformaria num bico. Subiu na mesma proporção do desktop
+     (cerca de 1,35x) e nada além disso. */
+  .wave-cap{ --altura-onda: clamp(240px, 44vw, 380px); }
 }
 
 .wave-cap svg{
@@ -257,10 +283,73 @@ body{
    requestAnimationFrame — as duas juntas somavam atraso e davam aquela
    sensação de "gelatina" atrasada em relação ao scroll. */
 .hs-track{
+  position: relative;   /* caixa de referência da linha desenhada */
   display: flex;
   height: 100vh;
+  height: 100svh;
   width: max-content;
   will-change: transform;
+}
+
+/* =========================================================================
+   LINHA DESENHADA PELO SCROLL
+
+   Um traço só, atravessando os cinco painéis de ponta a ponta, que vai sendo
+   desenhado conforme os painéis passam. Ele não é reto: em cada painel faz o
+   gesto daquele painel — sobe e dá uma volta no "I DESIGN", vira degraus de
+   código no "I DEVELOP", quica como bola no "I ANIMATE" e fecha numa espiral
+   no "SHOW YOU". O caminho é montado no js/script.js a partir da medida real
+   do painel, então ele acompanha qualquer tela.
+
+   Ele mora ATRÁS do texto (z-index 0, contra o 1 do .texto e o 2 do jardim).
+   Quando o traço cruza uma palavra, passa por trás dela — é o que faz parecer
+   que a linha costura o conteúdo em vez de riscar por cima.
+
+   Sobre custo: desenhar é animar `stroke-dashoffset`, que repinta o traço.
+   Por isso aqui não há filtro, sombra nem gradiente — só uma linha fina, que
+   é a coisa mais barata de rasterizar. E quem move o ponteiro é a Web
+   Animations API, não uma variável de CSS: mesma lição da bio, onde trocar
+   uma coisa pela outra derrubou o custo em 96%.
+   ========================================================================= */
+
+.hs-linha{
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.hs-linha path{
+  fill: none;
+  stroke: var(--lightgreen);
+  stroke-width: var(--traco, 3px);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* O valor vem do objeto LINHA no js/script.js, junto com espessura e forma —
+     um lugar só pra mexer. O .85 aqui é só o que vale se o script não rodar.
+     Verde-limão sobre o creme do painel tem pouco contraste, então ele precisa
+     de opacidade alta pra aparecer; o preto que esteve aqui antes vivia bem
+     com .26. */
+  opacity: var(--opacidade, .85);
+}
+
+/* o desenho só é escondido depois que o JS assumiu o controle do ponteiro —
+   sem script, a linha nasce inteira e visível */
+.hs-linha.linha-viva path{
+  stroke-dasharray: var(--comprimento);
+  animation: desenharLinha 1s linear both paused;
+}
+
+@keyframes desenharLinha{
+  from{ stroke-dashoffset: var(--comprimento); }
+  to  { stroke-dashoffset: 0; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .hs-linha.linha-viva path{ animation: none; stroke-dasharray: none; }
 }
 
 .hs-panel{
@@ -557,7 +646,27 @@ body{
      quebras viram espaço de verdade. Em container flex esse espaço some. */
   display: inline-flex;
   align-items: baseline;
-  perspective: 700px;
+
+  /* EM, E NÃO PX — e é isto que consertava a animação no celular.
+
+     `perspective` é a distância do olho até o plano da tela. O que decide a
+     FORÇA do efeito 3D não é essa distância sozinha, é a razão entre ela e o
+     tamanho do objeto que gira. Com um valor fixo de 700px e uma palavra que
+     vai de 62px (celular) a 410px (ultrawide), essa razão ia de 11,2 a 1,7 —
+     seis vezes e meia de diferença no mesmo efeito. Medi.
+
+     Na prática: no celular a perspectiva ficava tão distante que a rotação
+     virava quase ortográfica. As letras não chegavam tombadas e giravam até
+     encaixar; elas só achatavam e voltavam. O gesto de "peça sendo assentada",
+     que é o ponto do painel, sumia justamente na tela onde a maioria vê o
+     site. No ultrawide era o oposto: perto demais, distorcido.
+
+     Em `em` a perspectiva passa a ser medida NO CORPO DA LETRA, e a razão fica
+     igual em qualquer tela. O 3,04 não é um número novo: é exatamente
+     700 ÷ 230,4px, o corpo que a palavra tem num monitor de 1440. Ou seja, o
+     desktop continua com os mesmos 700px de antes (700,4px), e todas as outras
+     larguras passam a ter a proporção para a qual o efeito foi calibrado. */
+  perspective: 3.04em;
 }
 
 .dv-letra{
@@ -581,9 +690,35 @@ body{
   animation-timing-function: cubic-bezier(.34, 1.4, .64, 1);
   animation-fill-mode: both;
   animation-play-state: paused;
-  /* .16 é onde a palavra começa a entrar em cena; .05 de intervalo entre uma
-     letra e a seguinte, então as 8 assentam entre .16 e .63 do percurso */
-  animation-delay: calc((.16 + var(--i) * .05 - var(--prog, 0)) * 1s);
+
+  /* QUANDO A MONTAGEM ACONTECE — e por que ela mudou de lugar.
+
+     Vale ter a régua à mão. O --prog vira posição do painel na tela assim:
+
+         borda esquerda do painel = largura x (1 - 1.35 x prog)
+
+     ou seja, a fração do painel que já entrou é 1,35 x prog. Daí:
+
+         prog .16  ->  21% do painel visível   (só uma tira, espiando)
+         prog .40  ->  54% visível
+         prog .63  ->  85% visível
+         prog .74  ->  o painel ENCHE a tela
+
+     O ajuste anterior começava em .16 e fechava em .63. Isto é: as letras
+     começavam a se montar com um quinto do painel na tela e terminavam ANTES
+     de ele chegar. Quem rolava até aqui encontrava a palavra já pronta — a
+     montagem tinha acontecido de lado, na borda, enquanto o olho ainda estava
+     no painel anterior. O efeito existia e ninguém via.
+
+     Agora ele começa em .40, com o painel já mais da metade dentro, e a última
+     letra assenta em .80 — praticamente no instante em que o painel acaba de
+     encher a tela. É a leitura certa para o gesto: a peça encaixa quando a
+     coisa chega ao lugar, não antes.
+
+     O intervalo entre letras caiu de .05 para .04 porque a janela ficou mais
+     curta (.40 de percurso em vez de .47) e as oito precisam caber inteiras
+     dentro dela. Conta: .40 + 7 x .04 + .12 = .80. */
+  animation-delay: calc((.40 + var(--i) * .04 - var(--prog, 0)) * 1s);
 }
 
 @keyframes dvEncaixa{
@@ -594,7 +729,30 @@ body{
 
 /* ---------- régua de build ---------- */
 
+/* A RÉGUA NÃO ENTRA NA ALTURA DO .texto — e é isso que alinha os painéis.
+
+   O .hs-panel usa `place-items: center`, ou seja centra o .texto INTEIRO. Só
+   que este painel é o único com a régua de build dentro dele, então o .texto
+   daqui era mais alto que o do "I DESIGN." e o do "I ANIMATE." — e centrar uma
+   caixa mais alta empurra o conteúdo dela para CIMA.
+
+   O desalinhamento era exatamente metade da altura da régua, medido nos dois
+   extremos: 31px de régua no celular -> a palavra subia 15px; 42px no desktop
+   -> subia 21px. Percorrendo o scroll horizontal, "DEVELOP." pulava para cima
+   e voltava, enquanto as outras duas ficavam na mesma linha.
+
+   Tirando a régua do fluxo, o .texto passa a medir só o "I" mais a palavra,
+   igualzinho aos painéis vizinhos, e as três frases assentam na mesma altura.
+   A régua continua exatamente onde estava em relação à palavra: `top: 100%` a
+   põe logo abaixo da caixa do texto e o `margin-top` é o mesmo respiro de
+   antes, então as duas descem juntas, sem mudar nada entre elas.
+
+   O `position: relative` que isto exige já existe em `.painel-develop .texto`. */
 .build{
+  position: absolute;
+  top: 100%;
+  left: 0;
+
   display: flex;
   align-items: center;
   gap: 14px;
@@ -627,15 +785,18 @@ body{
 }
 
 /* A régua enche no MESMO percurso das letras: começa junto com a primeira
-   (.16) e fecha junto com a última (.63) — daí a duração de .47. É isso que
-   faz parecer que uma coisa está construindo a outra. */
+   (.40) e fecha junto com a última (.80) — daí a duração de .40. É isso que
+   faz parecer que uma coisa está construindo a outra, e por isso estes dois
+   números TÊM que ser mexidos junto com os do .dv-letra acima. Se saírem de
+   sincronia, a barra termina antes ou depois da palavra e o efeito perde o
+   sentido. */
 .painel-develop.dev-scrub .build-barra i{
   animation-name: buildEnche;
-  animation-duration: .47s;
+  animation-duration: .40s;
   animation-timing-function: linear;
   animation-fill-mode: both;
   animation-play-state: paused;
-  animation-delay: calc((.16 - var(--prog, 0)) * 1s);
+  animation-delay: calc((.40 - var(--prog, 0)) * 1s);
 }
 
 @keyframes buildEnche{
@@ -1765,6 +1926,13 @@ body{
   inset: 0;
   width: 100vw;
   height: 100vh;
+  /* dvh, e não svh: o overlay é `position: fixed` e precisa cobrir exatamente
+     o que está visível AGORA, com a barra do navegador no estado em que ela
+     estiver. Com `100vh` (altura grande) o rodapé do menu ficava embaixo da
+     barra no celular — os ícones de rede eram os primeiros a sumir.
+     Ao contrário do hero, aqui a altura mudar junto com a barra não custa
+     nada: o painel não tem conteúdo preso a scroll. */
+  height: 100dvh;
   background: var(--bg);
   z-index: 150; /* acima de .projetos (100), abaixo do botão (200) */
   display: flex;
@@ -2189,7 +2357,14 @@ body{
   display: inline-flex; /* remove o espaço "fantasma" entre os <span>, causado pelas quebras de linha no HTML */
   align-items: flex-end;
   font-family: 'JetBrains Mono', monospace;
-  perspective: 1000px;
+
+  /* Mesmo caso do .dev-alvo logo acima, e pelo mesmo motivo: as letras do
+     "ANIMATE." giram em rotateX/rotateY e a perspectiva era fixa em 1000px
+     enquanto o corpo varia de 62px a 410px. Aqui o fator é 1000 ÷ 230,4, de
+     novo o corpo num monitor de 1440 — o desktop não muda em nada e o celular
+     passa a ver o mesmo giro. Os dois painéis ficam coerentes entre si, que é
+     o que faz a sequência parecer uma coisa só. */
+  perspective: 4.34em;
 }
 
 .word span{
@@ -2759,7 +2934,20 @@ body{
    pra não haver dois números diferentes dizendo a mesma coisa.
    ========================================================================= */
 
-@media (max-width: 900px){
+/* O RECORTE NÃO É MAIS SÓ "900px DE LARGURA".
+
+   Celular deitado deixou de caber em 900px. Um iPhone 15 Pro Max em paisagem
+   é 932x430; o 16 Pro Max é 956x440. Pela largura eles passavam como
+   "desktop" e recebiam a parede de fotos e os links grandes — medi um 932x430
+   e o resultado era a coluna de links ocupando 525px numa tela de 430, com o
+   primeiro link cortado em -47 e os ícones de rede terminando em 478.
+
+   Por isso a condição virou uma lista: vale para tudo abaixo de 900px de
+   largura, COMO ANTES, e também para telas de até 960px que sejam baixas. O
+   teto de 960px é deliberado — pega os celulares deitados sem pegar uma janela
+   de desktop estreita e baixa (um 1000x600, por exemplo, continua com a
+   parede de fotos, porque ali ela ainda cabe). */
+@media (max-width: 900px), (max-width: 960px) and (max-height: 620px){
   :root{
     /* a mesma margem lateral pra todas as seções — antes cada uma tinha a sua
        (24px aqui, 6vw ali, 7vw acolá) e as bordas não se alinhavam */
@@ -2786,7 +2974,7 @@ body{
    linhas onduladas do fundo continuam ali e seguram o clima.
    ------------------------------------------------------------------------- */
 
-@media (max-width: 900px){
+@media (max-width: 900px), (max-width: 960px) and (max-height: 620px){
   .menu-content{
     flex-direction: column;
     justify-content: center;
@@ -2859,15 +3047,87 @@ body{
   .menu-links{ gap: 14px; }
 }
 
-/* de pé em tela curta (celular deitado, telinha antiga) o menu não cabe
-   centrado: vira rolagem, senão os links de baixo ficam inalcançáveis */
-@media (max-width: 900px) and (max-height: 620px){
+/* NOTEBOOK LARGO E BAIXO — o caso do 1280x800, e ele estava quebrado.
+
+   O QUE MEDI: em 1280x800 a coluna de links do menu ocupava 824px numa tela de
+   800. O topo do primeiro link ficava em -12 e a base do card de redes em 812.
+   Ou seja: o "INÍCIO" aparecia com a cabeça cortada e os ícones de rede com o
+   pé cortado, os dois ao mesmo tempo, numa das resoluções de notebook mais
+   comuns que existem.
+
+   A RAIZ é a mesma da paisagem do celular: `font-size: clamp(24px, 7vw, 6rem)`
+   tira o corpo dos links da LARGURA. Em 1280 o 7vw dá 89,6px, e cinco links
+   desse tamanho mais os respiros, o divisor e os ícones somam mais do que 800.
+   A altura nunca entrava na conta.
+
+   A CONTA (conferida contra a medição, bate em 1px): a coluna mede
+   6,75 x corpo + 217px. Para caber, corpo <= (altura - 217) / 6,75. Em 800
+   isso dá 86,4px — abaixo dos 89,6px que o 7vw pedia. Em 900 dá 101px, e por
+   isso monitores de 900 para cima nunca tiveram problema.
+
+   POR ISSO O RECORTE É `max-height: 860px` E NÃO UMA REGRA GERAL: 865px é a
+   altura exata em que o desenho atual deixa de caber. Acima disso nada muda —
+   1440x900, 1920x1080 e 2560x1440 continuam idênticos ao que sempre foram,
+   com os mesmos 96px de corpo. Só as janelas realmente baixas recebem o
+   ajuste, e recebem na dimensão certa: `min(7vw, 9.2vh)` deixa a largura
+   mandar enquanto ela é a restrição e passa o comando para a altura quando é
+   ela que aperta.
+
+   O `min-width: 1181px` também é deliberado: abaixo disso vale a faixa do
+   meio logo acima, que já usa 5,2vw (bem menor) e cabe sem ajuda. Sem esse
+   piso, esta regra AUMENTARIA a fonte num 1024x768 em vez de diminuir. */
+@media (min-width: 1181px) and (max-height: 860px){
+  .menu-links a{ font-size: clamp(24px, min(7vw, 9.2vh), 6rem); }
+  .menu-links{ gap: 14px; }
+  .menu-right{ gap: 24px; }
+}
+
+/* CELULAR DEITADO — o menu precisa CABER, e não virar uma página rolável.
+
+   O QUE ESTAVA ERRADO: num 844x390 (iPhone deitado, dos formatos mais comuns
+   que existem) o conteúdo do menu media 538px de altura numa tela de 390.
+   Medi. O último link ficava com a base no pixel 391 e os quatro ícones de
+   rede caíam inteiros abaixo da dobra, entre 436 e 488. Existia rolagem, mas
+   nada na tela avisava — abrir o menu e não ver as redes sociais é o mesmo que
+   elas não existirem.
+
+   A RAIZ: o corpo dos links saía de `7vw`. Deitado, a largura é justamente a
+   dimensão que sobra e a altura é a que falta — dimensionar pela largura fazia
+   a fonte CRESCER exatamente quando havia menos espaço vertical para ela. Em
+   844 de largura o `7vw` dava 59px, batendo no teto de 38px, enquanto a tela
+   tinha 390px de altura para cinco links, um divisor e quatro ícones.
+
+   O CONSERTO: tudo aqui passa a se medir em `vh`. Fonte, respiros e ícones
+   encolhem junto com a altura disponível, que é a restrição real. As contas,
+   conferidas depois de aplicar: 364px de conteúdo em 390 de tela, 344 em 360.
+   O `overflow-y: auto` continua como rede de segurança para telas ainda mais
+   baixas (um 568x320 ainda estoura por poucos pixels), mas deixou de ser o
+   caminho normal.
+
+   O respiro de cima é menor que o botão do menu de propósito: o botão fica no
+   canto superior DIREITO e os links são centrados, então eles nunca se
+   cruzam — conferi em 568, 740 e 844 de largura. */
+@media (max-width: 960px) and (max-height: 620px){
   .menu-content{
     justify-content: flex-start;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    padding: clamp(58px, 17vh, 84px) var(--gutter) clamp(12px, 4vh, 24px);
   }
-  .menu-links a{ font-size: clamp(26px, 7vw, 38px); padding: 8px 14px; }
+
+  .menu-right{ gap: clamp(10px, 2.6vh, 20px); }
+  .menu-links{ gap: 0; }
+
+  .menu-links a{
+    font-size: clamp(19px, 6.2vh, 34px);
+    /* o respiro vertical não é enfeite: é ele que mantém o alvo do dedo em
+       torno de 40px mesmo com a fonte encolhida */
+    padding: clamp(7px, 1.8vh, 12px) 14px;
+  }
+
+  .menu-social-card{ gap: clamp(10px, 3vh, 20px); }
+  .ms-icon{ width: clamp(40px, 11vh, 52px); height: clamp(40px, 11vh, 52px); }
+  .ms-icon i{ font-size: clamp(15px, 4vh, 19px); }
 }
 
 
@@ -2985,6 +3245,45 @@ body{
   .menu-links a{ font-size: clamp(26px, 8vw, 34px); }
   .ms-icon{ width: 46px; height: 46px; }
   .ms-icon i{ font-size: 17px; }
-  .idioma{ --comp: clamp(84px, 25vw, 120px); --recuo: 24px; }
+
+  /* --recuo era 24px e a etiqueta do nível saía pela borda direita da tela.
+
+     A conta: o rótulo é centrado numa caixa da largura do PANO (--larg), mas
+     "INTERMEDIÁRIO" em 10px com .12em de espaçamento mede 117px, e o pano
+     aqui tem 59. Sobram 29px de etiqueta para cada lado da caixa — e do lado
+     direito só havia 24px de recuo até a parede. Medi 5px de etiqueta fora da
+     tela em 320px e 3px em 360px.
+
+     Empurrar o mastro 8px mais para dentro resolve com folga e não encosta em
+     tipografia nenhuma: o pano, o corpo da letra e a etiqueta continuam
+     exatamente do mesmo tamanho. O que muda é a bandeira nascer um dedo mais
+     longe da parede, que é justamente para o que esta variável existe. */
+  .idioma{ --comp: clamp(84px, 25vw, 120px); --recuo: 32px; }
+
   .button-icon{ --cube-w: min(210px, 58vw); }
+}
+
+
+/* -------------------------------------------------------------------------
+   6. TELAS BAIXAS — celular deitado, notebook antigo, janela espremida
+
+   Este bloco precisa morar NO FIM. O `min-height: 480px` do hero e o
+   `min-height: 180px` da assinatura são regras de classe como estas, com a
+   mesma especificidade — quem vence é quem vier depois. Escrito lá em cima,
+   junto do hero, ele perdia justamente para as duas regras que existe para
+   corrigir (medi: a assinatura continuava em 180px e o texto digitado saía
+   5px para fora do hero, cortado pelo overflow).
+
+   O QUE ELE CONSERTA: num celular em paisagem a tela tem uns 360-430px de
+   altura. O piso de 480px do hero passava a ser MAIOR que a tela inteira, e
+   a hero — que é `overflow: hidden` — cortava o rodapé da coluna, ou seja, o
+   texto que se digita. Sem o piso, a coluna se acomoda no espaço real: o
+   rótulo em cima, a assinatura no meio com um piso menor, o texto embaixo.
+   ------------------------------------------------------------------------- */
+
+@media (max-height: 520px){
+  .hero{ min-height: 0; }
+  .assinatura-wrap{ min-height: 120px; }
+  .overlay{ padding-bottom: 4vh; }
+  .nome{ margin-top: 24px; }
 }

@@ -1,0 +1,122 @@
+/* =========================================================================
+   ÍCONES — Devicon + Font Awesome, SUBCONJUNTOS LOCAIS
+
+   POR QUE ESTE ARQUIVO EXISTE
+
+   Antes os ícones vinham de dois CDNs, e medi o que isso custava:
+
+     cdn.jsdelivr.net/devicon.min.css          52 KB
+     cdn.jsdelivr.net/fonts/devicon.ttf       473 KB   <- TTF, nem woff2 era
+     cdnjs.cloudflare.com/font-awesome/all.css 100 KB
+     cdnjs.../fa-solid-900.woff2              153 KB
+     cdnjs.../fa-brands-400.woff2             115 KB
+                                              ------
+                                              893 KB
+
+   893 KB para desenhar VINTE E UM ícones. As duas folhas ainda eram
+   render-blocking e moravam em dois domínios extras — dois DNS + dois TLS
+   antes de a página poder pintar qualquer coisa.
+
+   As fontes aqui são as MESMAS, recortadas com o fonttools para conter só os
+   21 glifos que o site usa. Mesmo desenho, mesmos nomes de classe, mesmo
+   HTML: nada muda na tela. O que muda é o peso — 893 KB viraram 6 KB — e o
+   número de domínios no caminho crítico, que virou zero.
+
+   COMO ATUALIZAR (se um dia entrar um ícone novo)
+     1. pegue o codepoint do ícone na folha oficial do CDN;
+     2. acrescente o codepoint à lista de --unicodes do subset;
+     3. rode o fonttools de novo sobre a fonte original e substitua o .woff2;
+     4. acrescente aqui embaixo a regra `content` da classe nova.
+   Sem o passo 3 o glifo simplesmente não existe na fonte e sai um quadrado.
+   ========================================================================= */
+
+
+/* =========================================================================
+   DEVICON — 8 glifos
+   Declarações-base copiadas da folha oficial 2.15.1 sem alteração, para o
+   ritmo da letra e o antialiasing continuarem idênticos.
+   ========================================================================= */
+
+@font-face{
+  font-family: "devicon";
+  src: url("../assets/fonts/devicon.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;   /* igual ao original: ícone não aparece "cru" */
+}
+
+[class^="devicon-"],
+[class*=" devicon-"]{
+  font-family: "devicon" !important;
+  speak: never;
+  font-style: normal;
+  font-weight: normal;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.devicon-css3-plain:before      { content: "\e679"; }
+.devicon-git-plain:before       { content: "\e7a8"; }
+.devicon-html5-plain:before     { content: "\e7f7"; }
+.devicon-javascript-plain:before{ content: "\e845"; }
+.devicon-vscode-plain:before    { content: "\e9da"; }
+.devicon-github-original:before { content: "\ea10"; }
+.devicon-bootstrap-plain:before { content: "\ea3e"; }
+.devicon-python-plain:before    { content: "\eb89"; }
+
+
+/* =========================================================================
+   FONT AWESOME 6.5.1 — 13 glifos (10 solid + 3 brands)
+   ========================================================================= */
+
+@font-face{
+  font-family: "Font Awesome 6 Free";
+  src: url("../assets/fonts/fa-solid-900.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 900;
+  font-display: block;
+}
+
+@font-face{
+  font-family: "Font Awesome 6 Brands";
+  src: url("../assets/fonts/fa-brands-400.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+
+/* base da folha oficial — inclusive o --fa-display, que o FA usa para deixar
+   o autor trocar inline-block por outra caixa sem reescrever o seletor */
+.fa-brands,
+.fa-solid{
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-font-smoothing: antialiased;
+  display: var(--fa-display, inline-block);
+  font-style: normal;
+  font-variant: normal;
+  line-height: 1;
+  text-rendering: auto;
+}
+
+.fa-solid { font-family: "Font Awesome 6 Free";   font-weight: 900; }
+.fa-brands{ font-family: "Font Awesome 6 Brands"; font-weight: 400; }
+
+/* ---------- solid ---------- */
+.fa-table-cells:before         { content: "\f00a"; }
+.fa-gears:before               { content: "\f085"; }
+.fa-envelope:before            { content: "\f0e0"; }
+.fa-sitemap:before             { content: "\f0e8"; }
+.fa-code:before                { content: "\f121"; }
+.fa-file-excel:before          { content: "\f1c3"; }
+.fa-mobile-screen-button:before{ content: "\f3cd"; }
+.fa-shield-halved:before       { content: "\f3ed"; }
+.fa-diagram-project:before     { content: "\f542"; }
+.fa-compass-drafting:before    { content: "\f568"; }
+
+/* ---------- brands ---------- */
+.fa-github:before      { content: "\f09b"; }
+.fa-linkedin-in:before { content: "\f0e1"; }
+.fa-instagram:before   { content: "\f16d"; }

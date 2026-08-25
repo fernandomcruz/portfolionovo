@@ -145,27 +145,75 @@ const SIGNATURE_DATA = {"color":"#D4FB06","bbox":[40.2,74.0,1901.8,884.0],"strok
     return { g: raw.g, s: raw.s, src: raw.src, n, x, y, w, ds, t, length, natural: t[n - 1] };
   }
 
-  const strokes = DATA.strokes.map(buildStroke);
+  /* ============================================================================
+     O PREPARO NÃO ACONTECE MAIS NO CARREGAMENTO DO SCRIPT.
 
-  /* --- linha do tempo: normaliza para a duração total e insere as pausas ---- */
-  let pauses = CONFIG.leadIn;
-  for (let i = 1; i < strokes.length; i++) {
-    pauses += strokes[i].g === strokes[i - 1].g ? CONFIG.liftInGroup : CONFIG.liftBetweenGroups;
+     `buildStroke` roda sobre 2604 pontos e, para cada um, mede curvatura numa
+     janela, tira raiz cúbica, aplica média móvel e integra o tempo. Isso
+     acontecia no instante em que o arquivo era avaliado — ou seja, dentro do
+     caminho crítico, junto com tudo o mais que a página precisa fazer para
+     aparecer.
+
+     O TAMANHO DISSO, MEDIDO E NÃO CHUTADO: 0,8ms de mediana num desktop
+     (5,3ms na primeira execução, antes do JIT aquecer). Não é o vilão da
+     página — cheguei a suspeitar que fosse, medi, e não era. Num celular
+     intermediário, 4 a 8 vezes mais lento, isso vira algo entre 3 e 25ms.
+
+     Ainda assim vale mover, e a razão é o MOMENTO, não o tamanho: a
+     assinatura só começa a ser escrita depois que a cortina do preloader
+     sobe, quase dois segundos mais tarde. Trabalho que ninguém está
+     esperando não tem por que disputar o instante mais concorrido da vida da
+     página, ainda mais quando existe um segundo inteiro de ociosidade logo em
+     seguida.
+
+     (Também testei trocar o literal de dados por JSON.parse, que costuma ser
+     mais rápido de analisar. Aqui não é: 0,2ms contra menos de 0,1ms do
+     literal. Ficou como está.)
+
+     Agora ela roda em tempo ocioso (`requestIdleCallback`), entre o
+     carregamento e a subida da cortina. As funções que dependem do resultado
+     chamam `prepararTracos()` antes de usar — a função é idempotente, então se
+     por qualquer motivo o tempo ocioso não tiver chegado, o preparo acontece
+     ali na hora e nada deixa de funcionar.
+     ========================================================================== */
+  let strokes = null;
+  let TOTAL = 0;
+
+  function prepararTracos() {
+    if (strokes) return;                       // já está pronto
+
+    strokes = DATA.strokes.map(buildStroke);
+
+    /* --- linha do tempo: normaliza para a duração total e insere as pausas -- */
+    let pauses = CONFIG.leadIn;
+    for (let i = 1; i < strokes.length; i++) {
+      pauses += strokes[i].g === strokes[i - 1].g ? CONFIG.liftInGroup : CONFIG.liftBetweenGroups;
+    }
+    const drawBudget = CONFIG.totalDuration - pauses - CONFIG.tailHold;
+    const naturalTotal = strokes.reduce((a, st) => a + st.natural, 0);
+    const scale = drawBudget / naturalTotal;   // um único fator: preserva o ritmo relativo
+
+    let cursorTime = CONFIG.leadIn;
+    strokes.forEach((st, i) => {
+      if (i > 0) cursorTime += st.g === strokes[i - 1].g ? CONFIG.liftInGroup : CONFIG.liftBetweenGroups;
+      st.t0 = cursorTime;
+      for (let j = 0; j < st.n; j++) st.t[j] *= scale;
+      st.duration = st.t[st.n - 1];
+      st.t1 = st.t0 + st.duration;
+      cursorTime = st.t1;
+    });
+    TOTAL = cursorTime + CONFIG.tailHold;
   }
-  const drawBudget = CONFIG.totalDuration - pauses - CONFIG.tailHold;
-  const naturalTotal = strokes.reduce((a, st) => a + st.natural, 0);
-  const scale = drawBudget / naturalTotal;   // um único fator: preserva o ritmo relativo
 
-  let cursorTime = CONFIG.leadIn;
-  strokes.forEach((st, i) => {
-    if (i > 0) cursorTime += st.g === strokes[i - 1].g ? CONFIG.liftInGroup : CONFIG.liftBetweenGroups;
-    st.t0 = cursorTime;
-    for (let j = 0; j < st.n; j++) st.t[j] *= scale;
-    st.duration = st.t[st.n - 1];
-    st.t1 = st.t0 + st.duration;
-    cursorTime = st.t1;
-  });
-  const TOTAL = cursorTime + CONFIG.tailHold;
+  /* Tempo ocioso, com teto: o `timeout` garante que o preparo não fique
+     esperando uma folga que nunca chega. 1200ms ainda cabe folgado antes da
+     cortina subir (2,2s no pior caso). Sem requestIdleCallback, um timeout
+     curto já tira o trabalho do caminho crítico. */
+  if ('requestIdleCallback' in window) {
+    requestIdleCallback(prepararTracos, { timeout: 1200 });
+  } else {
+    setTimeout(prepararTracos, 200);
+  }
 
   /* ============================================================================
      2. ENQUADRAMENTO RESPONSIVO
@@ -314,6 +362,7 @@ const SIGNATURE_DATA = {"color":"#D4FB06","bbox":[40.2,74.0,1901.8,884.0],"strok
 
   function play() {
     if (!stageReady()) return;                 // sem caixa ainda: não desenha
+    prepararTracos();                          // idempotente: normalmente já rodou no ocioso
     cancelAnimationFrame(rafId);
     layout();
     clearPaper();
@@ -327,6 +376,7 @@ const SIGNATURE_DATA = {"color":"#D4FB06","bbox":[40.2,74.0,1901.8,884.0],"strok
 
   function renderComplete() {
     if (!stageReady()) return;
+    prepararTracos();
     layout();
     clearPaper();
     resetPen();
@@ -342,6 +392,8 @@ const SIGNATURE_DATA = {"color":"#D4FB06","bbox":[40.2,74.0,1901.8,884.0],"strok
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       if (!stageReady()) return;
+      if (!everPlayed && !playing) return;     // nada escrito ainda: nada a refazer
+      prepararTracos();
       const t = playing ? elapsed : (everPlayed ? TOTAL : 0);
       layout();
       clearPaper();
@@ -404,5 +456,11 @@ const SIGNATURE_DATA = {"color":"#D4FB06","bbox":[40.2,74.0,1901.8,884.0],"strok
   else window.addEventListener('load', boot);
 
   // exposto apenas para inspeção/testes no console
-  window.__assinatura = { strokes, TOTAL, play, renderComplete, config: CONFIG };
+  window.__assinatura = {
+    play, renderComplete, config: CONFIG, prepararTracos,
+    /* getters, e não valores: os traços só existem depois do preparo, então
+       capturá-los aqui na criação do objeto entregaria `null` para sempre */
+    get strokes(){ return strokes; },
+    get TOTAL(){ return TOTAL; }
+  };
 })();
