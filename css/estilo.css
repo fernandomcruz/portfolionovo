@@ -576,7 +576,7 @@ body{
      terminar de entrar */
   animation-duration: var(--dur, .24s);
   animation-timing-function: linear;
-  animation-delay: calc((var(--ini) - var(--prog, 0)) * 1s);
+  animation-delay: 0s;   /* o ponteiro é o currentTime, escrito pelo js/script.js */
   animation-play-state: paused;
   animation-fill-mode: both;
   animation-iteration-count: 1;
@@ -651,25 +651,12 @@ body{
   display: inline-flex;
   align-items: baseline;
 
-  /* EM, E NÃO PX — e é isto que consertava a animação no celular.
-
-     `perspective` é a distância do olho até o plano da tela. O que decide a
-     FORÇA do efeito 3D não é essa distância sozinha, é a razão entre ela e o
-     tamanho do objeto que gira. Com um valor fixo de 700px e uma palavra que
-     vai de 62px (celular) a 410px (ultrawide), essa razão ia de 11,2 a 1,7 —
-     seis vezes e meia de diferença no mesmo efeito. Medi.
-
-     Na prática: no celular a perspectiva ficava tão distante que a rotação
-     virava quase ortográfica. As letras não chegavam tombadas e giravam até
-     encaixar; elas só achatavam e voltavam. O gesto de "peça sendo assentada",
-     que é o ponto do painel, sumia justamente na tela onde a maioria vê o
-     site. No ultrawide era o oposto: perto demais, distorcido.
-
-     Em `em` a perspectiva passa a ser medida NO CORPO DA LETRA, e a razão fica
-     igual em qualquer tela. O 3,04 não é um número novo: é exatamente
-     700 ÷ 230,4px, o corpo que a palavra tem num monitor de 1440. Ou seja, o
-     desktop continua com os mesmos 700px de antes (700,4px), e todas as outras
-     larguras passam a ter a proporção para a qual o efeito foi calibrado. */
+  /* EM, e não px. `perspective` fixa em 700px com uma palavra que vai de 62px
+     (celular) a 410px (ultrawide) fazia a razão entre as duas ir de 11,2 a 1,7:
+     no celular a rotação virava quase ortográfica e o gesto de "peça sendo
+     assentada" sumia. O 3,04 é 700 ÷ 230,4px, o corpo num monitor de 1440 —
+     então o desktop continua com os mesmos 700px e o resto ganha a proporção
+     para a qual o efeito foi calibrado. */
   perspective: 3.04em;
 }
 
@@ -688,6 +675,18 @@ body{
    A classe `dev-scrub` é posta pelo js/script.js. É ela que autoriza esconder:
    sem o script, nenhuma animação entra e a palavra fica legível do jeito
    normal, em vez de sumir esperando um --prog que não viria. */
+/* Os dois números da montagem moram AQUI, e o js/script.js os lê daqui.
+   Assim continua se calibrando o efeito no CSS, sem número repetido nos dois
+   lados para sair de sincronia. Ver `coletarCena` no js/script.js.
+
+   .40  = ponto do percurso em que a primeira letra começa (54% do painel na tela)
+   .04  = intervalo entre uma letra e a seguinte
+   As oito fecham em .40 + 7 x .04 + .12 = .80, junto com a régua de build. */
+.painel-develop.dev-scrub{
+  --dev-inicio: .40;
+  --dev-passo: .04;
+}
+
 .painel-develop.dev-scrub .dv-letra{
   animation-name: dvEncaixa;
   animation-duration: .12s;
@@ -695,34 +694,19 @@ body{
   animation-fill-mode: both;
   animation-play-state: paused;
 
-  /* QUANDO A MONTAGEM ACONTECE — e por que ela mudou de lugar.
+  /* QUANDO A MONTAGEM ACONTECE.
 
-     Vale ter a régua à mão. O --prog vira posição do painel na tela assim:
+   A régua: a fração do painel que já entrou é 1,35 x prog, então prog .16 é
+   21% do painel visível, .40 é 54% e .74 é o painel cheio.
 
-         borda esquerda do painel = largura x (1 - 1.35 x prog)
+   Começava em .16 e fechava em .63 — as letras se montavam com um quinto do
+   painel na tela e terminavam ANTES de ele chegar, então quem rolava até aqui
+   encontrava a palavra pronta. Agora começa em .40 e a última letra assenta em
+   .80, quando o painel acaba de encher a tela.
 
-     ou seja, a fração do painel que já entrou é 1,35 x prog. Daí:
-
-         prog .16  ->  21% do painel visível   (só uma tira, espiando)
-         prog .40  ->  54% visível
-         prog .63  ->  85% visível
-         prog .74  ->  o painel ENCHE a tela
-
-     O ajuste anterior começava em .16 e fechava em .63. Isto é: as letras
-     começavam a se montar com um quinto do painel na tela e terminavam ANTES
-     de ele chegar. Quem rolava até aqui encontrava a palavra já pronta — a
-     montagem tinha acontecido de lado, na borda, enquanto o olho ainda estava
-     no painel anterior. O efeito existia e ninguém via.
-
-     Agora ele começa em .40, com o painel já mais da metade dentro, e a última
-     letra assenta em .80 — praticamente no instante em que o painel acaba de
-     encher a tela. É a leitura certa para o gesto: a peça encaixa quando a
-     coisa chega ao lugar, não antes.
-
-     O intervalo entre letras caiu de .05 para .04 porque a janela ficou mais
-     curta (.40 de percurso em vez de .47) e as oito precisam caber inteiras
-     dentro dela. Conta: .40 + 7 x .04 + .12 = .80. */
-  animation-delay: calc((.40 + var(--i) * .04 - var(--prog, 0)) * 1s);
+   O intervalo caiu de .05 para .04 porque a janela ficou mais curta e as oito
+   precisam caber: .40 + 7 x .04 + .12 = .80. */
+  animation-delay: 0s;
 }
 
 @keyframes dvEncaixa{
@@ -733,25 +717,16 @@ body{
 
 /* ---------- régua de build ---------- */
 
-/* A RÉGUA NÃO ENTRA NA ALTURA DO .texto — e é isso que alinha os painéis.
+/* A régua fica fora do fluxo, e é isso que alinha os painéis.
 
-   O .hs-panel usa `place-items: center`, ou seja centra o .texto INTEIRO. Só
-   que este painel é o único com a régua de build dentro dele, então o .texto
-   daqui era mais alto que o do "I DESIGN." e o do "I ANIMATE." — e centrar uma
-   caixa mais alta empurra o conteúdo dela para CIMA.
+   O .hs-panel usa `place-items: center`, que centra o .texto inteiro. Como só
+   este painel tem a régua dentro dele, o bloco era mais alto que o do "I
+   DESIGN." e o do "I ANIMATE." — e centrar uma caixa mais alta empurra o
+   conteúdo para cima, exatamente metade da altura da régua (15px no celular,
+   21px no desktop).
 
-   O desalinhamento era exatamente metade da altura da régua, medido nos dois
-   extremos: 31px de régua no celular -> a palavra subia 15px; 42px no desktop
-   -> subia 21px. Percorrendo o scroll horizontal, "DEVELOP." pulava para cima
-   e voltava, enquanto as outras duas ficavam na mesma linha.
-
-   Tirando a régua do fluxo, o .texto passa a medir só o "I" mais a palavra,
-   igualzinho aos painéis vizinhos, e as três frases assentam na mesma altura.
-   A régua continua exatamente onde estava em relação à palavra: `top: 100%` a
-   põe logo abaixo da caixa do texto e o `margin-top` é o mesmo respiro de
-   antes, então as duas descem juntas, sem mudar nada entre elas.
-
-   O `position: relative` que isto exige já existe em `.painel-develop .texto`. */
+   Tirando a régua do fluxo o .texto passa a medir só o "I" mais a palavra. O
+   `position: relative` que isto exige já existe em `.painel-develop .texto`. */
 .build{
   position: absolute;
   top: 100%;
@@ -800,7 +775,7 @@ body{
   animation-timing-function: linear;
   animation-fill-mode: both;
   animation-play-state: paused;
-  animation-delay: calc((.40 - var(--prog, 0)) * 1s);
+  animation-delay: 0s;
 }
 
 @keyframes buildEnche{
@@ -841,19 +816,10 @@ body{
   .build-barra i{ transform: scaleX(1); }
 }
 
-/* O CELULAR AGORA TEM O MESMO PIN DO DESKTOP.
-
-   Aqui existia um fallback que trocava o pin por rolagem horizontal nativa:
-   a seção virava uma faixa comum e os painéis andavam de lado no arrasto do
-   dedo. Funcionava mecanicamente — medi o container rolando 1950px de
-   conteúdo em 390px de tela — mas não era o mesmo efeito. No desktop os
-   painéis atravessam a tela ENQUANTO SE ROLA A PÁGINA PRA BAIXO, e nada
-   avisava que no celular era preciso arrastar de lado. Na prática, quem
-   descia a página passava reto pela seção sem ver os painéis andarem.
-
-   Com o fallback removido, o pin do desktop passa a valer aqui também.
-   Sobrou desta media query só o que continua sendo problema de tela pequena:
-   o corpo das fontes. */
+/* O celular tem o mesmo pin do desktop. Aqui existia um fallback que trocava o
+   pin por rolagem horizontal nativa: funcionava, mas nada na tela avisava que
+   era preciso arrastar de lado, então quem descia a página passava reto pela
+   seção. Sobrou desta media query só o corpo das fontes. */
 @media (max-width: 768px){
   /* os painéis usam fontes de até 16vw: no celular "DEVELOPER" estourava a
      largura da tela e ficava cortado pela metade */
@@ -1453,7 +1419,9 @@ body{
 
 .idioma--dir .fio{ transform-origin: center right; }
 
-.bandeira--br{ --pano-img: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 14'><rect width='20' height='14' fill='%23009c3b'/><path d='M10 1.3 18.4 7 10 12.7 1.6 7Z' fill='%23ffdf00'/><circle cx='10' cy='7' r='3.4' fill='%23002776'/><path d='M6.9 5.6a3.4 3.4 0 0 1 6.3 1.1 9 9 0 0 0-6.3-1.1Z' fill='%23fff'/></svg>"); }
+/* Bandeira desenhada pela especificação, em módulos: SVG embutido, sem CDN e
+   sem requisição. */
+.bandeira--br{ --pano-img: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 14'><rect width='20' height='14' fill='%23009c3b'/><path d='M10 1.7 18.3 7 10 12.3 1.7 7Z' fill='%23ffdf00'/><circle cx='10' cy='7' r='3.5' fill='%23002776'/><g fill='%23fff'><circle cx='7.143' cy='6.371' r='.15'/><circle cx='7.452' cy='7.843' r='.15'/><circle cx='7.024' cy='8.157' r='.125'/><circle cx='7.795' cy='7.629' r='.071'/><circle cx='8.181' cy='8.19' r='.125'/><circle cx='8.076' cy='8.538' r='.1'/><circle cx='11.086' cy='5.914' r='.15'/><circle cx='12.452' cy='8.229' r='.15'/><circle cx='12.938' cy='8.262' r='.1'/><circle cx='12.595' cy='8.538' r='.125'/><circle cx='11.752' cy='9.271' r='.125'/><circle cx='11.748' cy='9.624' r='.1'/><circle cx='12.1' cy='8.995' r='.1'/><circle cx='12.381' cy='8.819' r='.125'/><circle cx='11.738' cy='8.929' r='.1'/><circle cx='8.667' cy='7.143' r='.125'/><circle cx='10.952' cy='6.824' r='.1'/><circle cx='10' cy='8.571' r='.15'/><circle cx='10.405' cy='7.876' r='.125'/><circle cx='10' cy='7.562' r='.125'/><circle cx='9.648' cy='7.876' r='.1'/><circle cx='9.824' cy='8.119' r='.071'/><circle cx='11.048' cy='9.357' r='.125'/><circle cx='11.348' cy='9.048' r='.1'/><circle cx='10.771' cy='8.962' r='.1'/><circle cx='8.595' cy='8.857' r='.15'/><circle cx='10' cy='9.738' r='.05'/></g><path d='M6.798 5.585A8.5 8.5 0 0 1 13.466 7.49A3.5 3.5 0 0 1 13.341 8.044A8 8 0 0 0 6.612 6.121A3.5 3.5 0 0 1 6.798 5.585Z' fill='%23fff'/></svg>"); }
 
 .bandeira--us{ --pano-img: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 14'><rect width='20' height='14' fill='%23fff'/><rect y='0.0' width='20' height='1.077' fill='%23b31942'/><rect y='2.154' width='20' height='1.077' fill='%23b31942'/><rect y='4.308' width='20' height='1.077' fill='%23b31942'/><rect y='6.462' width='20' height='1.077' fill='%23b31942'/><rect y='8.615' width='20' height='1.077' fill='%23b31942'/><rect y='10.769' width='20' height='1.077' fill='%23b31942'/><rect y='12.923' width='20' height='1.077' fill='%23b31942'/><rect width='8.0' height='7.538' fill='%230a3161'/><g fill='%23fff'><circle cx='0.667' cy='0.754' r='.165'/><circle cx='2.0' cy='0.754' r='.165'/><circle cx='3.333' cy='0.754' r='.165'/><circle cx='4.667' cy='0.754' r='.165'/><circle cx='6.0' cy='0.754' r='.165'/><circle cx='7.333' cy='0.754' r='.165'/><circle cx='1.333' cy='1.508' r='.165'/><circle cx='2.667' cy='1.508' r='.165'/><circle cx='4.0' cy='1.508' r='.165'/><circle cx='5.333' cy='1.508' r='.165'/><circle cx='6.667' cy='1.508' r='.165'/><circle cx='0.667' cy='2.262' r='.165'/><circle cx='2.0' cy='2.262' r='.165'/><circle cx='3.333' cy='2.262' r='.165'/><circle cx='4.667' cy='2.262' r='.165'/><circle cx='6.0' cy='2.262' r='.165'/><circle cx='7.333' cy='2.262' r='.165'/><circle cx='1.333' cy='3.015' r='.165'/><circle cx='2.667' cy='3.015' r='.165'/><circle cx='4.0' cy='3.015' r='.165'/><circle cx='5.333' cy='3.015' r='.165'/><circle cx='6.667' cy='3.015' r='.165'/><circle cx='0.667' cy='3.769' r='.165'/><circle cx='2.0' cy='3.769' r='.165'/><circle cx='3.333' cy='3.769' r='.165'/><circle cx='4.667' cy='3.769' r='.165'/><circle cx='6.0' cy='3.769' r='.165'/><circle cx='7.333' cy='3.769' r='.165'/><circle cx='1.333' cy='4.523' r='.165'/><circle cx='2.667' cy='4.523' r='.165'/><circle cx='4.0' cy='4.523' r='.165'/><circle cx='5.333' cy='4.523' r='.165'/><circle cx='6.667' cy='4.523' r='.165'/><circle cx='0.667' cy='5.277' r='.165'/><circle cx='2.0' cy='5.277' r='.165'/><circle cx='3.333' cy='5.277' r='.165'/><circle cx='4.667' cy='5.277' r='.165'/><circle cx='6.0' cy='5.277' r='.165'/><circle cx='7.333' cy='5.277' r='.165'/><circle cx='1.333' cy='6.031' r='.165'/><circle cx='2.667' cy='6.031' r='.165'/><circle cx='4.0' cy='6.031' r='.165'/><circle cx='5.333' cy='6.031' r='.165'/><circle cx='6.667' cy='6.031' r='.165'/><circle cx='0.667' cy='6.785' r='.165'/><circle cx='2.0' cy='6.785' r='.165'/><circle cx='3.333' cy='6.785' r='.165'/><circle cx='4.667' cy='6.785' r='.165'/><circle cx='6.0' cy='6.785' r='.165'/><circle cx='7.333' cy='6.785' r='.165'/></g></svg>"); }
 
@@ -1506,19 +1474,11 @@ body{
   }
 }
 
-/* Aqui morava uma faixa de luz varrendo o pano, num <span> esticado por cima
-   da bandeira inteira. Ela saiu, e o motivo vale ficar registrado:
-
-   uma camada com inset: 0 é um RETÂNGULO CHAPADO. Ela não dobra junto com as
-   fatias — e como o drop-shadow do .bandeira projeta a silhueta de tudo que
-   está dentro dele, o retângulo virava uma sombra quadrada aparecendo por trás
-   do pano. Era a "caixa atrás da bandeira".
-
-   Toda sombra e todo brilho do tecido agora moram DENTRO das fatias, que é o
-   único jeito de acompanharem a dobra: o degradê da tralha entrou como camada
-   do background de cada fatia, e a variação de luz é o filter: brightness dos
-   próprios keyframes. Se um dia voltar a fazer falta uma camada por cima do
-   pano inteiro, ela precisa ser fatiada do mesmo jeito. */
+/* Toda sombra e todo brilho do tecido moram DENTRO das fatias — é o único
+   jeito de acompanharem a dobra. Uma camada com `inset: 0` por cima do pano é
+   um retângulo chapado que não dobra, e como o drop-shadow do .bandeira projeta
+   a silhueta de tudo que está dentro dele, ela virava uma sombra quadrada
+   aparecendo por trás da bandeira. */
 
 /* ---------- o rótulo ---------- */
 
@@ -1849,6 +1809,13 @@ body{
   /* força a própria camada de composição — evita artefatos de subpixel
      nos elementos internos quando usamos mix-blend-mode */
   transform: translateZ(0);
+}
+
+/* Com o menu aberto o botão vira opaco: o mix-blend-mode: difference precisa
+   de algo atrás para inverter, e sobre o fundo chapado do overlay ele sumia. */
+.menu-toggle.open{
+  mix-blend-mode: normal;
+  background: var(--bg);
 }
 
 /* pulinho elástico do botão inteiro a cada clique — a classe é
@@ -2586,47 +2553,27 @@ body{
   .bio-retrato:hover img{ filter: saturate(1.12) contrast(1.06) brightness(1.05); }
 }
 
-/* A ENTRADA — revela de baixo para cima, uma vez só
+/* A ENTRADA — revela de baixo para cima, acompanhando o scroll
 
-   Esta foto NÃO é mais comandada pelo scroll, e a diferença é o pedido. Presa
-   ao scroll, ela anda pra frente e pra trás conforme se rola e fica parada no
-   meio do caminho se a pessoa parar no meio — vive num estado intermediário.
-   Agora ela dispara quando entra na tela e roda inteira, no ritmo dela, sem
-   desfazer.
-
-   E o gesto é REVELAR, não deslizar. O clip-path abre uma janela que cresce da
+   O gesto é REVELAR, não deslizar. O clip-path abre uma janela que cresce da
    base para o topo: `inset(100% 0 0 0)` não mostra nada, e conforme o recorte
    de cima diminui a área visível sobe a partir da borda de baixo. A foto vai
    surgindo — primeiro a barra do moletom, depois o tronco, por último o rosto.
    Os 34px que sobem junto são só para o movimento ter peso; quem faz o efeito
    é a janela.
 
-   Só esconde sob .retrato-pronto, classe que o JS coloca. Sem script, sem
+   Só esconde sob .retrato-scrub, classe que o JS coloca. Sem script, sem
    classe: a foto aparece normalmente. */
-.bio-retrato.retrato-pronto img{
+.bio-retrato.retrato-scrub img{
   opacity: 0;
   clip-path: inset(100% 0 0 0);
 }
 
-.bio-retrato.retrato-entra img{
-  animation: retratoRevela 1.15s cubic-bezier(.22, .68, .24, 1) .06s both;
-}
-
-/* O CAMINHO INDEPENDENTE, se a animação não rodar.
-
-   O `animation: none` aqui não é sobra: é o que faz a rede de segurança
-   funcionar. Animação com fill-mode `both` GANHA de declaração comum na
-   cascata, então pôr opacity: 1 sozinho não devolvia nada — a foto continuava
-   presa no primeiro quadro da animação, invisível. Medi exatamente isso: as
-   três classes aplicadas e a imagem ainda em opacity 0.
-
-   Cancelando a animação, as declarações abaixo passam a valer. Quando ela roda
-   normal já terminou muito antes deste caminho entrar (1,21s contra 2,2s),
-   então o estado final é o mesmo e não se vê troca nenhuma. */
-.bio-retrato.retrato-visivel img{
-  animation: none;
-  opacity: 1;
-  clip-path: inset(0 0 0 0);
+/* A revelação é presa ao scroll: a janela do clip-path sobe da base conforme a
+   foto entra. Só esconde sob .retrato-pronto, classe que o JS põe — sem script,
+   a foto aparece normalmente. */
+.bio-retrato.retrato-scrub img{
+  animation: retratoRevela 1s linear both paused;
 }
 
 @keyframes retratoRevela{
@@ -2643,7 +2590,7 @@ body{
 }
 
 @media (prefers-reduced-motion: reduce){
-  .bio-retrato.retrato-pronto img{
+  .bio-retrato.retrato-scrub img{
     opacity: 1;
     clip-path: none;
     animation: none;
@@ -2689,24 +2636,11 @@ body{
   animation-fill-mode: both;
   animation-play-state: paused;
 
-  /* O ATRASO É ZERO PORQUE QUEM MOVE O PONTEIRO É O JS.
-
-     Aqui existia `calc((var(--bw-i) * var(--bw-passo) - var(--prog)) * 1s)`:
-     bonito, e caríssimo. Cada vez que o --prog mudava — ou seja, todo quadro
-     de scroll — o navegador precisava reavaliar o atraso das 57 palavras e
-     recalcular o estilo de todas. Medi 3,16ms por quadro só nisso, num
-     orçamento de 16,7ms. Num celular, que é 4 a 8 vezes mais lento, isso
-     sozinho estourava o quadro inteiro: era a seção de contato travando.
-
-     A animação continua sendo esta, com estes keyframes. O que mudou é que o
-     js/script.js posiciona cada palavra pela Web Animations API, escrevendo
-     `currentTime` direto na animação. Isso não passa pelo recálculo de
-     estilo, e o mesmo movimento passou a custar 0,055ms — 98% menos.
-
-     Se este arquivo e o script saírem de sincronia, o sintoma é claro: as
-     palavras ficam paradas no primeiro quadro (invisíveis) porque ninguém
-     move o ponteiro. A classe .bio-scrub é o que autoriza esconder, e ela só
-     entra pelo script — sem script, texto normal. */
+  /* Atraso zero: quem move o ponteiro é o `currentTime` escrito pelo JS. Deixar
+     o CSS calcular o atraso a partir de um --prog obrigava a recalcular o
+     estilo das 57 palavras em todo quadro de scroll (3,16ms contra 0,055ms).
+     Se este arquivo e o script saírem de sincronia o sintoma é claro: as
+     palavras ficam paradas no primeiro quadro, invisíveis. */
   animation-delay: 0s;
 }
 
@@ -2938,19 +2872,12 @@ body{
    pra não haver dois números diferentes dizendo a mesma coisa.
    ========================================================================= */
 
-/* O RECORTE NÃO É MAIS SÓ "900px DE LARGURA".
-
-   Celular deitado deixou de caber em 900px. Um iPhone 15 Pro Max em paisagem
-   é 932x430; o 16 Pro Max é 956x440. Pela largura eles passavam como
-   "desktop" e recebiam a parede de fotos e os links grandes — medi um 932x430
-   e o resultado era a coluna de links ocupando 525px numa tela de 430, com o
-   primeiro link cortado em -47 e os ícones de rede terminando em 478.
-
-   Por isso a condição virou uma lista: vale para tudo abaixo de 900px de
-   largura, COMO ANTES, e também para telas de até 960px que sejam baixas. O
-   teto de 960px é deliberado — pega os celulares deitados sem pegar uma janela
-   de desktop estreita e baixa (um 1000x600, por exemplo, continua com a
-   parede de fotos, porque ali ela ainda cabe). */
+/* O recorte não é mais só "900px de largura": celular deitado passou disso —
+   um iPhone 15 Pro Max em paisagem é 932x430, o 16 Pro Max é 956x440. Pela
+   largura eles passavam como desktop e recebiam a parede de fotos e os links
+   grandes; medi um 932x430 com o primeiro link em -47 e as redes terminando em
+   478. O teto de 960px pega os celulares deitados sem pegar uma janela de
+   desktop estreita e baixa (um 1000x600 continua com as fotos). */
 @media (max-width: 900px), (max-width: 960px) and (max-height: 620px){
   :root{
     /* a mesma margem lateral pra todas as seções — antes cada uma tinha a sua
@@ -3051,66 +2978,34 @@ body{
   .menu-links{ gap: 14px; }
 }
 
-/* NOTEBOOK LARGO E BAIXO — o caso do 1280x800, e ele estava quebrado.
+/* NOTEBOOK LARGO E BAIXO — o caso do 1280x800.
 
-   O QUE MEDI: em 1280x800 a coluna de links do menu ocupava 824px numa tela de
-   800. O topo do primeiro link ficava em -12 e a base do card de redes em 812.
-   Ou seja: o "INÍCIO" aparecia com a cabeça cortada e os ícones de rede com o
-   pé cortado, os dois ao mesmo tempo, numa das resoluções de notebook mais
-   comuns que existem.
+   O corpo dos links sai de `7vw`, ou seja da LARGURA, mas quem aperta aqui é a
+   altura: em 1280x800 a coluna media 824px numa tela de 800, com o primeiro
+   link cortado no topo e os ícones de rede no pé.
 
-   A RAIZ é a mesma da paisagem do celular: `font-size: clamp(24px, 7vw, 6rem)`
-   tira o corpo dos links da LARGURA. Em 1280 o 7vw dá 89,6px, e cinco links
-   desse tamanho mais os respiros, o divisor e os ícones somam mais do que 800.
-   A altura nunca entrava na conta.
+   A coluna mede 6,75 x corpo + 217px, então cabe enquanto
+   corpo <= (altura - 217) / 6,75 — 86,4px em 800, 101px em 900. Daí o recorte
+   em 860px: acima disso o desenho sempre coube e nada muda.
 
-   A CONTA (conferida contra a medição, bate em 1px): a coluna mede
-   6,75 x corpo + 217px. Para caber, corpo <= (altura - 217) / 6,75. Em 800
-   isso dá 86,4px — abaixo dos 89,6px que o 7vw pedia. Em 900 dá 101px, e por
-   isso monitores de 900 para cima nunca tiveram problema.
-
-   POR ISSO O RECORTE É `max-height: 860px` E NÃO UMA REGRA GERAL: 865px é a
-   altura exata em que o desenho atual deixa de caber. Acima disso nada muda —
-   1440x900, 1920x1080 e 2560x1440 continuam idênticos ao que sempre foram,
-   com os mesmos 96px de corpo. Só as janelas realmente baixas recebem o
-   ajuste, e recebem na dimensão certa: `min(7vw, 9.2vh)` deixa a largura
-   mandar enquanto ela é a restrição e passa o comando para a altura quando é
-   ela que aperta.
-
-   O `min-width: 1181px` também é deliberado: abaixo disso vale a faixa do
-   meio logo acima, que já usa 5,2vw (bem menor) e cabe sem ajuda. Sem esse
-   piso, esta regra AUMENTARIA a fonte num 1024x768 em vez de diminuir. */
+   O `min-width: 1181px` também é deliberado: abaixo disso vale a faixa do meio,
+   que já usa 5,2vw e cabe sem ajuda. Sem esse piso, esta regra AUMENTARIA a
+   fonte num 1024x768 em vez de diminuir. */
 @media (min-width: 1181px) and (max-height: 860px){
   .menu-links a{ font-size: clamp(24px, min(7vw, 9.2vh), 6rem); }
   .menu-links{ gap: 14px; }
   .menu-right{ gap: 24px; }
 }
 
-/* CELULAR DEITADO — o menu precisa CABER, e não virar uma página rolável.
+/* CELULAR DEITADO — o menu precisa CABER, não virar página rolável.
 
-   O QUE ESTAVA ERRADO: num 844x390 (iPhone deitado, dos formatos mais comuns
-   que existem) o conteúdo do menu media 538px de altura numa tela de 390.
-   Medi. O último link ficava com a base no pixel 391 e os quatro ícones de
-   rede caíam inteiros abaixo da dobra, entre 436 e 488. Existia rolagem, mas
-   nada na tela avisava — abrir o menu e não ver as redes sociais é o mesmo que
-   elas não existirem.
-
-   A RAIZ: o corpo dos links saía de `7vw`. Deitado, a largura é justamente a
-   dimensão que sobra e a altura é a que falta — dimensionar pela largura fazia
-   a fonte CRESCER exatamente quando havia menos espaço vertical para ela. Em
-   844 de largura o `7vw` dava 59px, batendo no teto de 38px, enquanto a tela
-   tinha 390px de altura para cinco links, um divisor e quatro ícones.
-
-   O CONSERTO: tudo aqui passa a se medir em `vh`. Fonte, respiros e ícones
-   encolhem junto com a altura disponível, que é a restrição real. As contas,
-   conferidas depois de aplicar: 364px de conteúdo em 390 de tela, 344 em 360.
-   O `overflow-y: auto` continua como rede de segurança para telas ainda mais
-   baixas (um 568x320 ainda estoura por poucos pixels), mas deixou de ser o
-   caminho normal.
+   Num 844x390 o conteúdo media 538px numa tela de 390: o último link terminava
+   no pixel 391 e os quatro ícones de rede caíam abaixo da dobra. A raiz é a
+   mesma do bloco acima — o corpo saía de `7vw`, e deitado a largura é o que
+   sobra e a altura o que falta. Aqui tudo se mede em `vh`.
 
    O respiro de cima é menor que o botão do menu de propósito: o botão fica no
-   canto superior DIREITO e os links são centrados, então eles nunca se
-   cruzam — conferi em 568, 740 e 844 de largura. */
+   canto superior direito e os links são centrados, então nunca se cruzam. */
 @media (max-width: 960px) and (max-height: 620px){
   .menu-content{
     justify-content: flex-start;

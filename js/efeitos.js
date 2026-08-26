@@ -12,7 +12,7 @@
      4. Block reveal
      5. Stack — marquee que reage à velocidade do scroll
      6. Idiomas — os mastros entram pelas laterais
-     7. Retrato do "sobre mim" — revela ao entrar na tela
+     7. Retrato do "sobre mim" — revela acompanhando o scroll
      8. Idiomas — a rajada do hover
      9. Pausa de animações fora da tela
    ========================================================================= */
@@ -30,12 +30,9 @@
   const lerp  = (a, b, t) => a + (b - a) * t;
   const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
-  /* A AGENDA VEM DO js/script.js — um ouvinte de scroll e um de resize para o
-     site inteiro, em vez de um par por módulo. Ver o comentário longo lá.
-
-     O plano B existe porque este arquivo se declara aditivo: se o script.js
-     não tiver carregado, cada módulo volta a registrar o seu próprio ouvinte e
-     nada aqui deixa de funcionar. */
+  /* A Agenda vem do js/script.js. O plano B existe porque este arquivo se
+     declara aditivo: sem o script.js cada módulo volta a registrar o seu
+     próprio ouvinte e nada aqui deixa de funcionar. */
   const Agenda = window.Agenda || {
     scroll(fn){
       let esperando = false;
@@ -46,6 +43,8 @@
       }, { passive: true });
       return fn;
     },
+    pintar(fn){ return this.scroll(fn); },
+    pedirQuadro(){},
     resize(fn){ window.addEventListener('resize', fn); return fn; },
     parar(){}
   };
@@ -178,18 +177,8 @@
     const fill = document.getElementById('scrollProgressFill');
     if (!fill) return;
 
-    /* A ALTURA DO DOCUMENTO É GUARDADA, NÃO PERGUNTADA A CADA QUADRO.
-
-       `document.documentElement.scrollHeight` é leitura de layout — daquelas
-       que obrigam o navegador a resolver a página inteira antes de responder.
-       Isso acontecia em TODO quadro de rolagem, e para um número que só muda
-       quando a janela muda de tamanho ou quando o trilho horizontal é
-       remedido.
-
-       Guardado aqui, o quadro de scroll vira uma divisão e uma escrita de
-       transform: nenhuma leitura de layout. A altura é refeita no resize —
-       que é quando o hsLayout também reescreve a altura da seção "Sobre", e
-       por isso a fila do resize recalcula depois dela. */
+    /* A altura rolável é guardada: `scrollHeight` é leitura de layout, e era
+       paga em todo quadro de rolagem para um número que só muda no resize. */
     let alturaRolavel = 0;
 
     function medirAltura(){
@@ -201,7 +190,7 @@
       fill.style.transform = `scaleX(${p})`;
     }
 
-    Agenda.scroll(pintar);
+    Agenda.pintar(pintar);
     Agenda.resize(() => { medirAltura(); pintar(); });
 
     /* a altura final só existe depois que as fontes assentam e o hsLayout
@@ -474,7 +463,7 @@
       rodando = false;
     }
 
-    Agenda.scroll(() => {
+    Agenda.pintar(() => {
       const delta = window.scrollY - ultimoY;
       ultimoY = window.scrollY;
 
@@ -544,47 +533,95 @@
 
 
   /* =======================================================================
-     7. RETRATO DO "SOBRE MIM" — REVELA AO ENTRAR NA TELA
-     Aqui NÃO é scrub. A diferença importa: no scrub a imagem anda para frente
-     e para trás conforme se rola, e fica no meio do caminho se a pessoa parar
-     no meio. Aqui é um disparo único — assim que ela aparece na tela, a
-     revelação acontece inteira, no ritmo dela, e não se desfaz.
+     7. RETRATO DO "SOBRE MIM" — REVELA ACOMPANHANDO O SCROLL
 
-     Mesma rede de segurança dos outros módulos que escondem conteúdo: o
-     estado escondido só existe sob uma classe que este script coloca. Sem
-     script, a foto simplesmente aparece.
+     A janela do clip-path sobe da base conforme a foto entra na tela: rolar
+     revela, rolar de volta esconde. Antes era um disparo único; agora quem
+     conduz é o dedo.
+
+     Duas coisas que essa troca precisa resolver, e que são o motivo do
+     `percurso` abaixo não ser a fração visível direta:
+
+     · NÃO PODE COMEÇAR ANTES DE APARECER. Como o progresso é medido a partir
+       da borda de baixo da área visível, com a foto fora da tela ele é
+       negativo e vira zero. Não há palpite de quando ela vai aparecer — ou ela
+       já entrou, ou o progresso é zero. É a mesma régua dos outros módulos.
+
+     · NÃO PODE DESFAZER AO PASSAR. Fração visível cai de novo quando a foto
+       sai por cima, e a foto se apagaria depois de já ter sido vista. O
+       percurso conta só o quanto ela SUBIU, sem olhar a borda de baixo dela,
+       então continua crescendo depois de entrar e trava em 1.
+
+     Durante a entrada as duas contas dão exatamente o mesmo número — a
+     diferença só aparece depois.
+
+     Mesma rede de segurança dos outros módulos que escondem conteúdo: o estado
+     escondido só existe sob uma classe que este script coloca. Sem script, a
+     foto simplesmente aparece.
      ===================================================================== */
 
-  (function initRetratoReveal(){
+  (function initRetratoScrub(){
     const fig = document.querySelector('.bio-retrato');
     if (!fig) return;
     if (MENOS_MOVIMENTO) return;   // a foto já está no lugar
     if (!Viewport) return;         // sem régua não se esconde nada — ver o topo
 
-    fig.classList.add('retrato-pronto');
+    const img = fig.querySelector('img');
+    if (!img) return;
 
-    function revelar(){
-      fig.classList.add('retrato-entra');
-      // teto: setTimeout corre mesmo com animação congelada
-      setTimeout(() => fig.classList.add('retrato-visivel'), 2200);
+    /* A classe é `retrato-scrub` e não o `retrato-pronto` de antes de
+       propósito: ela nomeia ESTA implementação. Os dois arquivos podem chegar
+       ao navegador em versões diferentes — foi o que aconteceu aqui, com o CSS
+       novo e o js/efeitos.js ainda em cache —, e com o nome antigo o resultado
+       era a foto escondida para sempre: o CSS novo pendurava a animação pausada
+       na classe que o JS velho colocava, e nada movia o ponteiro dela. Com o
+       nome novo, qualquer descompasso entre os dois dá no mesmo resultado
+       inofensivo: nenhuma classe casa, a foto simplesmente aparece. */
+    fig.classList.add('retrato-scrub');
+
+    /* A animação nasce no próximo cálculo de estilo, e `getAnimations` só
+       enxerga o que já existe — daí a leitura de offsetHeight, que força esse
+       cálculo agora. Filtrar pelo nome, e não pegar o [0], porque a transição
+       do filtro do hover mora no mesmo elemento e também aparece nessa lista
+       enquanto estiver correndo. */
+    void img.offsetHeight;
+    const anim = img.getAnimations()
+      .find((a) => a.animationName === 'retratoRevela') || null;
+
+    /* Sem animação a foto ficaria escondida para sempre no fim da página.
+       Devolve ela e sai. */
+    if (!anim) { fig.classList.remove('retrato-scrub'); return; }
+
+    const DUR = 1000;              // a régua da animação pausada, em ms
+    const COMECA  = 0.10;          // zona morta: uma nesga de foto não começa nada
+    const TERMINA = 0.90;          // revelada por inteiro com 90% dela dentro
+
+    let ultimo = -1;
+
+    function pintar(){
+      const r = fig.getBoundingClientRect();
+      if (r.height <= 0) return;
+      const a = Viewport.area();
+
+      const percurso = (a.top + a.altura - r.top) / Math.min(r.height, a.altura);
+
+      let p = (percurso - COMECA) / (TERMINA - COMECA);
+      p = p < 0 ? 0 : (p > 1 ? 1 : p);
+      p = p * p * (3 - 2 * p);     // assenta as duas pontas; o meio segue o dedo
+
+      /* Arredondar dá 1000 degraus — mais do que a tela resolve — e evita
+         reescrever a animação quando o scroll não mudou nada de fato. */
+      const t = Math.round(p * DUR);
+      if (t === ultimo) return;
+      ultimo = t;
+      anim.currentTime = t;
     }
 
-    /* QUANDO DISPARAR — a foto espera estar praticamente inteira na tela.
-
-       Já passei por duas versões cedo demais. A primeira soltava com 25% da
-       foto visível, ou seja, ela ESPIANDO pela borda de baixo: a revelação
-       de 1,15s corria enquanto a foto ainda estava quase toda fora, e quem
-       rolava até ela encontrava tudo pronto. A segunda pedia 55% visível e o
-       topo acima de 70% da altura — melhor, mas medi e no desktop isso ainda
-       disparava com a foto 63% visível e cortada pela borda inferior.
-
-       Os 0.85 daqui são os mesmos de antes e continuam certos: com a foto
-       tendo 431px num monitor de 900, 85% dela à vista é a foto assentada no
-       campo de visão, e só então o traçado começa. Confirmei que dá pra chegar
-       lá: ela sobe até -20px no desktop e -322px no celular, bem além do
-       necessário. O que saiu foi a fiação em volta — quatro gatilhos escritos
-       à mão, cada um repetindo a mesma pergunta de um jeito. */
-    Viewport.aoEntrar([fig], { fracao: 0.85 }, revelar);
+    Agenda.pintar(pintar);
+    Agenda.resize(pintar);
+    window.addEventListener('load', pintar, { once: true });
+    if (document.fonts) document.fonts.ready.then(pintar);
+    pintar();
   })();
 
 
@@ -638,32 +675,37 @@
     const MARGEM = 150;   // retoma um pouco antes de aparecer, pra nunca
                           // "nascer" parado na tela
 
-    /* PAUSADO É O ESTADO INICIAL, e essa inversão é o conserto.
-
-       Antes o módulo confiava no IntersectionObserver para descobrir o que
-       estava fora da tela. Só que a classe nascia AUSENTE, ou seja: tudo
-       começava rodando, e só parava quando o observer resolvesse avisar. Medi
-       o resultado com a página no topo — 68 animações das bandeiras e 8 dos
-       marquees girando a mais de 3.700px abaixo da dobra, desde o primeiro
-       quadro. Justamente o trabalho que este módulo existe pra evitar.
-
-       Marcando tudo como fora da tela antes de qualquer coisa, o padrão passa
-       a ser o barato: só volta a rodar o que for visto de fato. Pausar
-       animação não esconde conteúdo nenhum, então não há risco em errar para
-       o lado de pausar demais. */
+    /* Pausado é o estado inicial. Antes a classe nascia ausente: tudo começava
+       rodando e só parava quando o observer avisasse — medi 68 animações das
+       bandeiras e 8 dos marquees girando a 3.700px abaixo da dobra desde o
+       primeiro quadro. Pausar não esconde conteúdo, então não há risco em
+       errar para o lado de pausar demais. */
     secoes.forEach((s) => s.classList.add('fora-da-tela'));
 
-    // conta pela geometria, sem depender do observer
-    function conferir(){
+    /* Medir e escrever em passadas separadas: alternar `getBoundingClientRect`
+       com `classList.toggle` nas seis seções fazia o navegador resolver o
+       layout de novo a cada volta do laço. Aqui o laço só mede, guarda o
+       resultado, e a escrita acontece depois. */
+    const perto = new Array(secoes.length);
+
+    function medir(){
       const h = window.innerHeight || 1;
-      for (const s of secoes) {
-        const r = s.getBoundingClientRect();
-        const perto = r.bottom > -MARGEM && r.top < h + MARGEM;
-        s.classList.toggle('fora-da-tela', !perto);
+      for (let i = 0; i < secoes.length; i++) {
+        const r = secoes[i].getBoundingClientRect();
+        perto[i] = r.bottom > -MARGEM && r.top < h + MARGEM;
       }
     }
 
-    Agenda.scroll(conferir);
+    function aplicar(){
+      for (let i = 0; i < secoes.length; i++) {
+        secoes[i].classList.toggle('fora-da-tela', !perto[i]);
+      }
+    }
+
+    function conferir(){ medir(); aplicar(); }
+
+    Agenda.scroll(medir);
+    Agenda.pintar(aplicar);
     Agenda.resize(conferir);
     conferir();
 

@@ -20,7 +20,8 @@
       "Bash(sed -n '/^function atualizarProgressoPaineis/,/^}/p' js/script.js)",
       "Bash(sed -n '/^function hsRender/,/^}/p' js/script.js)",
       "Bash(curl -s \"http://localhost:5413/js/script.js\")",
-      "Bash(curl -sI \"http://localhost:5413/js/script.js\")"
+      "Bash(curl -sI \"http://localhost:5413/js/script.js\")",
+      "Bash(echo \"--- exit $? \\(1 = nada dangling\\) ---\")"
     ]
   }
 }

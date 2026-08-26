@@ -4,8 +4,13 @@
     {
       "name": "portfolio",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "5413"],
-      "port": 5413
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "5414"
+      ],
+      "port": 5414,
+      "autoPort": false
     }
   ]
 }

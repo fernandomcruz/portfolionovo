@@ -473,26 +473,16 @@ a, button, [role="button"], input, textarea, select, summary,
 
 
 /* =========================================================================
-   11. AS ONDAS DO MENU SAEM DO ORÇAMENTO ENQUANTO O MENU ESTÁ FECHADO
+   11. AS ONDAS DO MENU COM O MENU FECHADO
 
-   São 16 linhas × 2 trilhas = 32 SVGs, mais os invólucros: perto de 100
-   elementos vivendo dentro de um overlay que começa fechado e que na maior
-   parte da visita continua fechado.
+   Aqui esteve um `content-visibility: hidden` nas ondas enquanto o menu está
+   fechado, para pular o layout dos ~112 elementos do fundo. Saiu, e vale
+   registrar por quê: medido, o ganho foi ZERO — mediana e p90 idênticas com e
+   sem a regra, porque são elementos simples e baratos de posicionar. Em troca
+   ela fazia o Chrome logar "Rendering was performed in a subtree hidden by
+   content-visibility" em todo carregamento.
 
-   As ANIMAÇÕES já estavam pausadas (regra no estilo.css). O que continuava
-   sendo pago era o layout: `visibility: hidden` impede pintar, mas não
-   impede o navegador de medir e posicionar os cem elementos a cada
-   recálculo. `content-visibility: hidden` pula a subárvore inteira — layout
-   e pintura.
-
-   Por que é seguro AQUI e não seria em outros pontos do menu: pular a
-   subárvore descarta o estilo computado dos filhos, e transição precisa de
-   um estado inicial computado para partir. As fotos, os links e os ícones
-   entram com `transition` escalonada — neles isto quebraria a entrada. As
-   ondas não têm transição nenhuma: só animações infinitas, que recomeçam
-   sozinhas. Por isso a regra é apertada no .menu-waves e não no painel.
+   O que de fato economiza aqui continua no estilo.css: as ~64 animações das
+   ondas ficam pausadas com o menu fechado.
    ========================================================================= */
 
-.menu-panel:not(.open) .menu-waves{
-  content-visibility: hidden;
-}
