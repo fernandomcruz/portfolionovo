@@ -851,12 +851,12 @@ function linhaComposicao(W, H){
    quanto a curva "abre" nas passagens.
    ========================================================================= */
 
-function linhaCaminho(pontos, tensao){
-  if (pontos.length < 2) return '';
+function linhaSegmentos(pontos, tensao){
+  if (pontos.length < 2) return [];
 
   const n = (i) => pontos[Math.max(0, Math.min(pontos.length - 1, i))];
   const f = (v) => v.toFixed(1);
-  const partes = [`M${f(pontos[0][0])},${f(pontos[0][1])}`];
+  const fora = [];
 
   for (let i = 0; i < pontos.length - 1; i++) {
     const p0 = n(i - 1), p1 = n(i), p2 = n(i + 1), p3 = n(i + 2);
@@ -864,15 +864,114 @@ function linhaCaminho(pontos, tensao){
     const c1y = p1[1] + (p2[1] - p0[1]) / 6 * tensao * 2;
     const c2x = p2[0] - (p3[0] - p1[0]) / 6 * tensao * 2;
     const c2y = p2[1] - (p3[1] - p1[1]) / 6 * tensao * 2;
-    partes.push(` C${f(c1x)},${f(c1y)} ${f(c2x)},${f(c2y)} ${f(p2[0])},${f(p2[1])}`);
+    fora.push(`M${f(p1[0])},${f(p1[1])} C${f(c1x)},${f(c1y)} ${f(c2x)},${f(c2y)} ${f(p2[0])},${f(p2[1])}`);
   }
-  return partes.join('');
+  return fora;
+}
+
+function linhaCaminho(pontos, tensao){
+  const segs = linhaSegmentos(pontos, tensao);
+  if (!segs.length) return '';
+  // um caminho só: o primeiro M e depois apenas os C
+  return segs[0] + segs.slice(1).map((d) => d.slice(d.indexOf(' C'))).join('');
 }
 
 
 /* =========================================================================
    MONTAGEM
+
+   O traço é montado como UMA fatia por segmento de curva, e não como um
+   caminho só. O motivo é de pintura, não de geometria.
+
+   `stroke-dashoffset` não é uma propriedade que o compositor saiba animar: a
+   cada mudança o navegador invalida a CAIXA INTEIRA do caminho e rasteriza de
+   novo a parte dela que está na tela. Com um traço de 30px de espessura sobre
+   8166px de percurso, isso é ~1,3 megapixel de curva antisserrilhada redesenhada
+   POR QUADRO enquanto se rola — e era o que sobrava de pesado no scroll
+   horizontal depois que o JavaScript já tinha sido reduzido a 0,1ms.
+
+   Fatiado, só a fatia onde a ponta do lápis está muda de dashoffset. As de trás
+   ficam paradas em 0 (desenhadas), as da frente paradas no comprimento delas
+   (invisíveis). A área invalidada cai de o caminho inteiro para um segmento.
+
+   Duas coisas que isto exige:
+     · a opacidade sai do path e vai para o <svg>. Com ela no path, as pontas
+       arredondadas de fatias vizinhas se sobrepõem e o alfa compõe duas vezes,
+       o que apareceria como um ponto mais escuro em cada emenda. No <svg> as
+       fatias compõem entre si em alfa cheio e a opacidade é aplicada ao
+       conjunto — o mesmo resultado de um caminho só.
+     · as fatias compartilham exatamente o ponto de emenda e usam
+       `stroke-linecap: round`, então as duas meias-luas coincidem e a junta
+       fica idêntica a um `stroke-linejoin: round`.
+
+   O caminho-mestre continua no DOM, sem traço, porque é dele que saem
+   `getTotalLength` e `getPointAtLength` para a tabela de X.
    ========================================================================= */
+
+/* Recria as fatias. Cada uma é um cubic só, com o dasharray no comprimento
+   dela; guardamos o comprimento acumulado para saber, no quadro, qual fatia
+   contém a ponta. */
+function hsLinhaFatiar(emPixels){
+  const NS = 'http://www.w3.org/2000/svg';
+  const ds = linhaSegmentos(emPixels, LINHA.tensao);
+
+  for (const f of hsLinha.fatias) f.el.remove();
+  hsLinha.fatias = [];
+  hsLinha.fatiaAtiva = -1;
+
+  let acumulado = 0;
+  for (let i = 0; i < ds.length; i++) {
+    const el = document.createElementNS(NS, 'path');
+    el.setAttribute('d', ds[i]);
+    hsLinha.svg.appendChild(el);
+
+    const comp = el.getTotalLength();
+    el.style.strokeDasharray = comp.toFixed(1);
+    el.style.strokeDashoffset = comp.toFixed(1);
+
+    hsLinha.fatias.push({ el, inicio: acumulado, comp });
+    acumulado += comp;
+  }
+  hsLinha.comprimentoFatias = acumulado;
+  hsLinha.path.setAttribute('stroke', 'none');   // vira só régua de medida
+}
+
+/* Põe as fatias no estado correspondente a `s` (comprimento de arco já
+   percorrido). Só toca no que mudou: numa rolagem contínua isso é uma fatia
+   por quadro, e nas travessias de emenda, duas. */
+function hsLinhaAplicar(s){
+  const fatias = hsLinha.fatias;
+  if (!fatias.length) return;
+
+  let ativa = hsLinha.fatiaAtiva;
+  if (ativa < 0) ativa = 0;
+
+  // caminha até a fatia que contém a ponta (poucos passos, e só quando muda)
+  while (ativa > 0 && s < fatias[ativa].inicio) ativa--;
+  while (ativa < fatias.length - 1 && s >= fatias[ativa].inicio + fatias[ativa].comp) ativa++;
+
+  if (ativa !== hsLinha.fatiaAtiva) {
+    for (let i = 0; i < fatias.length; i++) {
+      if (i === ativa) continue;
+      const f = fatias[i];
+      const alvo = i < ativa ? 0 : f.comp;
+      if (f.desenhado !== alvo) {
+        f.desenhado = alvo;
+        f.el.style.strokeDashoffset = alvo.toFixed(1);
+      }
+    }
+    hsLinha.fatiaAtiva = ativa;
+  }
+
+  const f = fatias[ativa];
+  const dentro = Math.max(0, Math.min(f.comp, s - f.inicio));
+  const off = f.comp - dentro;
+  if (f.desenhado !== off) {
+    f.desenhado = off;
+    f.el.style.strokeDashoffset = off.toFixed(1);
+  }
+}
+
 
 let hsLinhaRetentativa = 0;
 
@@ -886,7 +985,8 @@ const hsLinha = (() => {
   const path = document.createElementNS(NS, 'path');
   svg.appendChild(path);
   hsTrack.insertBefore(svg, hsTrack.firstChild);
-  return { svg, path, anim: null, larguraMedida: 0, alturaMedida: 0, prog: 0 };
+  return { svg, path, anim: null, larguraMedida: 0, alturaMedida: 0, prog: 0,
+           fatias: [], fatiaAtiva: -1, desenhavel: false };
 })();
 
 function hsLinhaLayout(){
@@ -923,7 +1023,7 @@ function hsLinhaLayout(){
   const mudouLargura = W !== hsLinha.larguraMedida;
   const mudouAltura = hsLinha.alturaMedida > 0 &&
     Math.abs(H - hsLinha.alturaMedida) / hsLinha.alturaMedida > LINHA.toleranciaDeAltura;
-  if (!mudouLargura && !mudouAltura && hsLinha.anim) return;
+  if (!mudouLargura && !mudouAltura && hsLinha.fatias.length) return;
 
   hsLinha.larguraMedida = W;
   hsLinha.alturaMedida = H;
@@ -942,13 +1042,14 @@ function hsLinhaLayout(){
   ]);
   hsLinha.path.setAttribute('d', linhaCaminho(emPixels, LINHA.tensao));
   hsLinha.svg.setAttribute('viewBox', `0 0 ${W * hsPanelCount} ${H}`);
+  hsLinhaFatiar(emPixels);
 
   const traco = Math.max(LINHA.espessuraMin,
                 Math.min(LINHA.espessuraMax, W / LINHA.espessuraDivisor));
   hsLinha.svg.style.setProperty('--traco', traco.toFixed(2) + 'px');
   hsLinha.svg.style.setProperty('--opacidade', String(LINHA.opacidade));
   const comprimento = hsLinha.path.getTotalLength();
-  hsLinha.svg.style.setProperty('--comprimento', comprimento.toFixed(0));
+
 
   /* TABELA DE X POR COMPRIMENTO — montada aqui, usada no quadro.
 
@@ -979,20 +1080,19 @@ function hsLinhaLayout(){
   hsLinha.xFinal = tabela[N];
   hsLinha.larguraPainel = W;
 
-  /* A classe é o que autoriza esconder o traço, e entra só aqui, com o
-     caminho já pronto. Sem este trecho a linha nasce inteira e visível — o
-     estado seguro. */
-  hsLinha.svg.classList.add('linha-viva');
-
-  if (PREFERE_MENOS_MOVIMENTO) { hsLinha.anim = null; return; }
-
-  hsLinha.anim = hsLinha.path.getAnimations()[0] || null;
-  if (hsLinha.anim) {
-    hsLinha.anim.pause();
-    // devolve o desenho ao ponto em que estava: sem isto, todo resize (e toda
-    // mexida na barra do navegador) apagaria a linha e recomeçaria do zero
-    hsLinhaDesenhar(hsLinha.prog);
+  if (PREFERE_MENOS_MOVIMENTO) {
+    /* sem movimento a linha aparece inteira, sem ser desenhada — e o
+       `desenhavel` é o que impede o quadro de voltar a escondê-la */
+    hsLinha.desenhavel = false;
+    for (const f of hsLinha.fatias) { f.desenhado = 0; f.el.style.strokeDashoffset = '0'; }
+    return;
   }
+
+  hsLinha.desenhavel = true;
+
+  // devolve o desenho ao ponto em que estava: sem isto, todo resize (e toda
+  // mexida na barra do navegador) apagaria a linha e recomeçaria do zero
+  hsLinhaDesenhar(hsLinha.prog);
 }
 
 
@@ -1026,7 +1126,7 @@ function hsLinhaFracaoEm(alvoX){
 function hsLinhaDesenhar(prog){
   if (!hsLinha) return;
   hsLinha.prog = prog;
-  if (!hsLinha.anim || !hsLinha.tabelaX) return;
+  if (!hsLinha.desenhavel || !hsLinha.tabelaX) return;
 
   /* A PONTA DO LÁPIS ANDA EM X, não em comprimento de traço.
 
@@ -1046,8 +1146,8 @@ function hsLinhaDesenhar(prog){
      do campo de visão. Os dois objetivos ao mesmo tempo, sem truque. */
   const alvoX = hsLinha.xInicial + (hsLinha.xFinal - hsLinha.xInicial) * prog;
 
-  const t = hsLinhaFracaoEm(alvoX) * 1000;
-  hsLinha.anim.currentTime = t < 0 ? 0 : (t > 1000 ? 1000 : t);
+  const fracao = Math.max(0, Math.min(1, hsLinhaFracaoEm(alvoX)));
+  hsLinhaAplicar(fracao * hsLinha.comprimentoFatias);
 }
 
 /* O pin vale em TODAS as larguras agora. Antes havia um desvio aqui que, no

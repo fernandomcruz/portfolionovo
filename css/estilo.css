@@ -326,35 +326,25 @@ body{
   overflow: visible;
 }
 
+/* A opacidade mora no <svg>, não no path: as fatias têm as pontas
+   arredondadas sobrepostas nas emendas, e com alfa por path o valor comporia
+   duas vezes ali — um ponto mais escuro em cada junta. No <svg> elas compõem
+   entre si em alfa cheio e a opacidade vale para o conjunto. */
+.hs-linha{
+  opacity: var(--opacidade, .85);
+}
+
 .hs-linha path{
   fill: none;
   stroke: var(--lightgreen);
   stroke-width: var(--traco, 3px);
   stroke-linecap: round;
   stroke-linejoin: round;
-  /* O valor vem do objeto LINHA no js/script.js, junto com espessura e forma —
-     um lugar só pra mexer. O .85 aqui é só o que vale se o script não rodar.
-     Verde-limão sobre o creme do painel tem pouco contraste, então ele precisa
-     de opacidade alta pra aparecer; o preto que esteve aqui antes vivia bem
-     com .26. */
-  opacity: var(--opacidade, .85);
 }
 
 /* o desenho só é escondido depois que o JS assumiu o controle do ponteiro —
    sem script, a linha nasce inteira e visível */
-.hs-linha.linha-viva path{
-  stroke-dasharray: var(--comprimento);
-  animation: desenharLinha 1s linear both paused;
-}
 
-@keyframes desenharLinha{
-  from{ stroke-dashoffset: var(--comprimento); }
-  to  { stroke-dashoffset: 0; }
-}
-
-@media (prefers-reduced-motion: reduce){
-  .hs-linha.linha-viva path{ animation: none; stroke-dasharray: none; }
-}
 
 .hs-panel{
   flex: 0 0 100vw;
