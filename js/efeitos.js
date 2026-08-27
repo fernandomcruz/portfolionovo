@@ -566,33 +566,33 @@
     if (MENOS_MOVIMENTO) return;   // a foto já está no lugar
     if (!Viewport) return;         // sem régua não se esconde nada — ver o topo
 
-    const img = fig.querySelector('img');
-    if (!img) return;
-
     /* A classe é `retrato-scrub` e não o `retrato-pronto` de antes de
        propósito: ela nomeia ESTA implementação. Os dois arquivos podem chegar
        ao navegador em versões diferentes — foi o que aconteceu aqui, com o CSS
        novo e o js/efeitos.js ainda em cache —, e com o nome antigo o resultado
-       era a foto escondida para sempre: o CSS novo pendurava a animação pausada
-       na classe que o JS velho colocava, e nada movia o ponteiro dela. Com o
-       nome novo, qualquer descompasso entre os dois dá no mesmo resultado
-       inofensivo: nenhuma classe casa, a foto simplesmente aparece. */
+       era a foto escondida para sempre. Hoje qualquer descompasso entre os
+       dois dá no mesmo resultado inofensivo: o CSS cai no fallback do --rp e a
+       foto simplesmente aparece. */
     fig.classList.add('retrato-scrub');
 
-    /* A animação nasce no próximo cálculo de estilo, e `getAnimations` só
-       enxerga o que já existe — daí a leitura de offsetHeight, que força esse
-       cálculo agora. Filtrar pelo nome, e não pegar o [0], porque a transição
-       do filtro do hover mora no mesmo elemento e também aparece nessa lista
-       enquanto estiver correndo. */
-    void img.offsetHeight;
-    const anim = img.getAnimations()
-      .find((a) => a.animationName === 'retratoRevela') || null;
+    /* O QUE ESTE MÓDULO ESCREVE É UMA VARIÁVEL, e não mais o `currentTime` de
+       uma @keyframes pausada. A versão anterior precisava PROCURAR a animação:
 
-    /* Sem animação a foto ficaria escondida para sempre no fim da página.
-       Devolve ela e sai. */
-    if (!anim) { fig.classList.remove('retrato-scrub'); return; }
+         img.getAnimations().find((a) => a.animationName === 'retratoRevela')
 
-    const DUR = 1000;              // a régua da animação pausada, em ms
+       e essa linha tem duas dependências que o celular não honra. A lista só
+       existe depois que o navegador resolve o estilo, e o `offsetHeight`
+       forçado que garantia isso no Chrome não garante no WebKit; e
+       `animationName` só existe no Safari a partir do 16.4. Falhando qualquer
+       uma, `anim` vinha nulo, o módulo desistia e devolvia a foto estática —
+       que é exatamente o que se via no iPhone: a foto aparecia inteira e não
+       acompanhava o dedo.
+
+       O --rp não tem como não estar lá: é o próprio elemento que carrega o
+       valor, e o CSS interpola no cálculo do estilo, igual em todo motor que
+       entende `var()`. E se este trecho não rodar, o CSS cai no fallback e a
+       foto aparece — mesma rede de antes, agora sem depender de um objeto que
+       pode não ter nascido. */
 
     /* ONDE NA TELA O EFEITO ACONTECE.
 
@@ -637,11 +637,12 @@
       p = p * p * (3 - 2 * p);     // assenta as duas pontas; o meio segue o dedo
 
       /* Arredondar dá 1000 degraus — mais do que a tela resolve — e evita
-         reescrever a animação quando o scroll não mudou nada de fato. */
-      const t = Math.round(p * DUR);
+         reescrever a variável (e com ela recalcular o estilo da imagem)
+         quando o scroll não mudou nada de fato. */
+      const t = Math.round(p * 1000);
       if (t === ultimo) return;
       ultimo = t;
-      anim.currentTime = t;
+      fig.style.setProperty('--rp', t / 1000);
     }
 
     Agenda.pintar(pintar);

@@ -2621,32 +2621,39 @@ body{
    revelação TERMINA na parte que já é translúcida, em vez de começar nela.
 
    Só esconde sob .retrato-scrub, classe que o JS coloca. Sem script, sem
-   classe: a foto aparece normalmente. */
+   classe: a foto aparece normalmente.
+
+   QUEM MOVE O EFEITO É O --rp (0 a 1), escrito pelo js/efeitos.js a cada
+   quadro de scroll. Aqui já esteve uma @keyframes pausada cujo ponteiro o JS
+   empurrava pelo `currentTime`, e era ela que fazia a foto não reagir ao
+   scroll no celular: para achar a animação o script precisava de
+   `getAnimations()` E da propriedade `animationName` de cada item da lista.
+
+   Essa propriedade só existe no Safari a partir do 16.4, e a lista em si só
+   fica pronta depois que o navegador resolve o estilo — momento que cada
+   motor escolhe sozinho, e que o `offsetHeight` forçado do script garantia no
+   Chrome mas não no WebKit. Falhando qualquer um dos dois, o script não
+   achava nada, desistia e devolvia a foto estática. No iPhone era exatamente
+   isso que se via: a foto aparecia inteira e não acompanhava o dedo.
+
+   Uma variável não depende de nada disso — é substituição de texto no cálculo
+   do estilo, igual em todo motor que entende `var()`, e o valor está no
+   elemento em vez de dentro de um objeto de animação que pode não existir.
+
+   O `1` do fallback é a rede de segurança: se o JS não rodar, não escrever a
+   variável ou escrever lixo, o cálculo cai no 1 e a foto simplesmente aparece
+   — o mesmo destino de quem não tem a classe. */
 .bio-retrato.retrato-scrub img{
-  opacity: 0;
-  clip-path: inset(0 0 100% 0);
-  animation: retratoRevela 1s linear both paused;
+  opacity: var(--rp, 1);
+  clip-path: inset(0 0 calc((1 - var(--rp, 1)) * 100%) 0);
+  transform: translateY(calc((var(--rp, 1) - 1) * 34px));
 }
 
-@keyframes retratoRevela{
-  from{
-    opacity: 0;
-    clip-path: inset(0 0 100% 0);
-    transform: translateY(-34px);
-  }
-  to{
-    opacity: 1;
-    clip-path: inset(0 0 0 0);
-    transform: translateY(0);
-  }
-}
-
+/* Cinto e suspensório: o JS já sai de cena sozinho com "reduzir movimento"
+   ligado (e aí a classe acima nem chega a entrar). Isto cobre só o caso de o
+   CSS e o script chegarem ao navegador em versões diferentes. */
 @media (prefers-reduced-motion: reduce){
-  .bio-retrato.retrato-scrub img{
-    opacity: 1;
-    clip-path: none;
-    animation: none;
-  }
+  .bio-retrato.retrato-scrub img{ --rp: 1; }
 }
 
 .contato-label{
