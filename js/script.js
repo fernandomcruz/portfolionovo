@@ -1258,10 +1258,62 @@ const VELOCIDADE_PAINEL = 1.58;   // px de painel por px de rolagem
    pagar por uma informação que já estava na mão. */
 let hsAltura = 0;
 
+/* A ALTURA DE REFERÊNCIA DO PIN NÃO PODE SER `window.innerHeight`.
+
+   Esta é a única altura do site que o JAVASCRIPT escreve na página — todo o
+   resto sai de `vh`/`svh`, que são fixos. E ela entra na conta TRÊS vezes
+   (a tela presa, a tela de pausa e a fração do EXTRA_PIN_VH), ou seja, cada
+   pixel de diferença aqui vira 2,2 pixels de altura de documento.
+
+   No celular a barra do navegador recolhe e volta durante a rolagem, e nesse
+   instante `innerHeight` muda: num iPhone 14 ela vai de 664 para 745. O
+   navegador dispara `resize`, o hsLayout roda de novo e a seção do "sobre"
+   passa de 2448px para 2626px — a página inteira abaixo dela, PROJETOS,
+   STACK e CONTATO, desliza 178px enquanto o dedo está no meio do gesto.
+
+   Por que só aparecia no iPhone, e só perto da Contact:
+
+     · no desktop não existe barra retrátil, então `resize` nunca acontece
+       durante o scroll e a altura jamais se mexe;
+     · o Chrome do Android implementa SCROLL ANCHORING — ele percebe que o
+       conteúdo acima da tela mudou de tamanho e compensa a posição sozinho,
+       de modo que nada se move na tela. O WebKit não implementa;
+     · a barra do Safari fica recolhida durante toda a descida e volta a
+       aparecer justamente ao CHEGAR NO FIM DA PÁGINA — que é onde mora a
+       Contact. É ali que o recolhe-e-volta acontece, e é ali que a página
+       salta para cima e depois para baixo. Pior: encurtando o documento no
+       fim do percurso, o Safari ainda precisa grampear o scroll para não
+       passar do último pixel, e esse grampo é o "teletransporte" seco.
+
+   A medida certa já existe e é a da PRÓPRIA TELA PRESA: o CSS declara
+   `.hs-track`/`.hs-sticky` em `100svh` exatamente para isso ("Com svh ele
+   fica quieto", diz o comentário lá). `svh` é a menor altura que a tela pode
+   ter — com a barra à mostra — e não muda quando ela recolhe. Lendo a altura
+   do trilho em vez de perguntar ao `window`, a conta passa a usar o mesmo
+   número que o pino ocupa de verdade, e o documento para de respirar.
+
+   No desktop `svh`, `vh` e `innerHeight` são o mesmo número (conferido: 720
+   nos três), então lá nada muda — nem a altura da seção, nem o ritmo dos
+   painéis, nem um pixel de layout. É a mesma fonte de medida que o
+   `hsLinhaLayout` logo acima já usa, então os dois também deixam de poder
+   discordar.
+
+   O último valor bom é guardado: se o trilho for medido num instante em que
+   ele ainda não tem caixa (aba em segundo plano, carregamento), a conta usa
+   o que já sabia em vez de zerar a seção. */
+let hsAlturaTela = 0;
+
+function medirAlturaDaTelaPresa(){
+  const h = hsTrack.getBoundingClientRect().height;
+  if (h > 1) hsAlturaTela = h;
+  else if (!hsAlturaTela) hsAlturaTela = window.innerHeight || 0;
+  return hsAlturaTela;
+}
+
 function hsLayout(){
   hsLinhaLayout();   // o caminho é remontado junto com o layout do trilho
 
-  const H = window.innerHeight;
+  const H = medirAlturaDaTelaPresa();
   const percurso = (hsPanelCount - 1) * window.innerWidth;
   const rolagemHorizontal = percurso / VELOCIDADE_PAINEL;
 
@@ -1498,10 +1550,21 @@ function hsRender(){
 function hsUpdate(){
   const rect = hsOuter.getBoundingClientRect();
   // hsAltura no lugar de hsOuter.offsetHeight: mesmo número, sem leitura de layout
-  const total = hsAltura - window.innerHeight;
+  /* `hsAlturaTela`, e não `window.innerHeight`, PELO MESMO MOTIVO do hsLayout
+     — e aqui a consistência é obrigatória, não preferência: esta conta desfaz
+     a que montou o hsAltura. Com dois números diferentes ela não devolve o
+     percurso desenhado. Medido num iPhone com a barra recolhida, o `total`
+     saía com 745 onde o hsAltura tinha usado 664, e o percurso horizontal
+     encolhia de 987px para 809px: os painéis andavam 22% mais rápido do que o
+     projetado e a faixa fechava antes da hora, mudando de ritmo toda vez que
+     a barra do navegador ia e voltava. Com a mesma altura dos dois lados a
+     conta se fecha exata no percurso desenhado, em qualquer aparelho.
+     Continua sendo leitura de variável, não de layout — o custo por quadro é
+     o mesmo de antes. */
+  const total = hsAltura - hsAlturaTela;
 
   // reserva (1 + EXTRA_PIN_VH) telas pro pin/pausa, sem esticar o ritmo do scroll horizontal
-  const horizontalTotal = Math.max(total - window.innerHeight * (1 + EXTRA_PIN_VH), 1);
+  const horizontalTotal = Math.max(total - hsAlturaTela * (1 + EXTRA_PIN_VH), 1);
   const progress = Math.min(Math.max(-rect.top / horizontalTotal, 0), 1);
 
   hsPercurso = (hsPanelCount - 1) * window.innerWidth;
