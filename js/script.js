@@ -589,7 +589,20 @@ let alvoPX = 0, alvoPY = 0;   // para onde o mouse quer levar (-1 a 1)
 let atualPX = 0, atualPY = 0; // onde as fotos estão agora
 let parallaxRodando = false;
 
+/* ESTE É UM DOS DOIS LAÇOS DE ANIMAÇÃO QUE DEIXARAM DE TER rAF PRÓPRIO.
+
+   A função em si não mudou; o que mudou é quem a chama. Antes ela pedia o
+   próprio `requestAnimationFrame` e girava em paralelo com o da Agenda, o que
+   significa dois ciclos de animação disputando o mesmo quadro sempre que
+   alguém mexesse o mouse enquanto rolava — que é o caso normal de quem usa
+   roda de mouse.
+
+   Agora ela é uma função de DESENHO da Agenda: roda dentro do mesmo ciclo de
+   todo mundo, depois de todas as medidas, e sai na frente com uma comparação
+   quando não há nada para mover. Quando ainda falta caminho, ela pede o
+   próximo quadro pela Agenda em vez de abrir um laço novo. */
 function pintarMenuParallax(){
+  if (!parallaxRodando) return;
   parallaxRodando = false;
 
   atualPX += (alvoPX - atualPX) * PARALLAX_SUAVIDADE;
@@ -611,14 +624,18 @@ function pintarMenuParallax(){
   // continua até assentar — é o que dá a inércia
   if (Math.abs(alvoPX - atualPX) > 0.001 || Math.abs(alvoPY - atualPY) > 0.001) {
     parallaxRodando = true;
-    requestAnimationFrame(pintarMenuParallax);
+    Agenda.pedirQuadro();
   }
 }
+
+/* só escreve `transform`, não lê layout nenhum: por isso mora na passada de
+   desenho, ao lado do trilho do scroll horizontal */
+Agenda.pintar(pintarMenuParallax);
 
 function acordarParallax(){
   if (parallaxRodando) return;
   parallaxRodando = true;
-  requestAnimationFrame(pintarMenuParallax);
+  Agenda.pedirQuadro();
 }
 
 function updateMenuParallax(e){
@@ -1018,7 +1035,6 @@ function linhaSegmentos(pontos){
 
   const k = LINHA.tensao / 3;    // (p2-p0)/6 * tensao * 2, simplificado
   const c = LINHA.corda;
-  const f = (v) => v.toFixed(1);
   const em = (i) => pontos[Math.max(0, Math.min(pontos.length - 1, i))];
   const fora = [];
 
@@ -1033,7 +1049,70 @@ function linhaSegmentos(pontos){
     const c2x = p2[2] ? p2[0] - dx * c : p2[0] - (p3[0] - p1[0]) * k;
     const c2y = p2[2] ? p2[1] - dy * c : p2[1] - (p3[1] - p1[1]) * k;
 
-    fora.push(`M${f(p1[0])},${f(p1[1])}C${f(c1x)},${f(c1y)} ${f(c2x)},${f(c2y)} ${f(p2[0])},${f(p2[1])}`);
+    /* Devolve os OITO NÚMEROS da cúbica, e não o `d` pronto. Quem monta o
+       texto é o `linhaSubdividir` abaixo, porque ele precisa dos pontos de
+       controle para cortar a curva sem deformá-la. */
+    fora.push([p1[0], p1[1], c1x, c1y, c2x, c2y, p2[0], p2[1]]);
+  }
+  return fora;
+}
+
+
+/* =========================================================================
+   SUBDIVISÃO — POR QUE O TRAÇO É PICADO EM MUITOS PEDAÇOS
+
+   Desenhar é animar `stroke-dashoffset`, e mexer no dashoffset de um <path>
+   REPINTA a caixa inteira daquele <path>. Essa é a conta que decide o custo
+   do scroll horizontal, porque acontece em todo quadro em que a linha anda.
+
+   Medido nesta página com um <path> por segmento de curva (16 no total):
+   caixa média de 80.354px², máxima de 123.501px² — 8,7% e 13,4% de uma tela
+   de 1280x720. Cada quadro repintava esse tanto de traço antialiasado de
+   42,7px de espessura. Num celular com DPR 3 são ~720 mil pixels de
+   dispositivo por quadro, só na linha.
+
+   Cortar cada cúbica em pedaços menores não muda NADA do desenho — a curva é
+   idêntica, ponto a ponto — e divide essa área por volta de cinco. Como o
+   `hsLinhaAplicar` só toca no pedaço ATIVO, o resto do traço fica parado na
+   camada, já rasterizado.
+
+   O corte é De Casteljau, que é o algoritmo exato: cortar uma Bézier cúbica
+   em t devolve duas cúbicas cuja união é a curva original, sem aproximação.
+   Por isso dá pra picar à vontade sem risco de a linha mudar de forma.
+
+   O limite é a própria espessura: com 42,7px de traço, um pedaço muito curto
+   tem a caixa dominada pelo `stroke-width` e a divisão para de compensar. 5
+   é onde a curva de retorno achata nesta composição.
+   ========================================================================= */
+const LINHA_PEDACOS = 5;
+
+function linhaSubdividir(seg, n){
+  const f = (v) => v.toFixed(1);
+  const fora = [];
+  let [x0, y0, x1, y1, x2, y2, x3, y3] = seg;
+
+  for (let i = 0; i < n; i++) {
+    if (i === n - 1) {
+      fora.push(`M${f(x0)},${f(y0)}C${f(x1)},${f(y1)} ${f(x2)},${f(y2)} ${f(x3)},${f(y3)}`);
+      break;
+    }
+
+    /* corta o que SOBROU em t: o primeiro corte tira 1/n do todo, o segundo
+       tira 1/(n-1) do que restou, e assim por diante — no fim os n pedaços
+       cobrem faixas iguais do parâmetro original */
+    const t = 1 / (n - i);
+    const ax = x0 + (x1 - x0) * t, ay = y0 + (y1 - y0) * t;
+    const bx = x1 + (x2 - x1) * t, by = y1 + (y2 - y1) * t;
+    const cx = x2 + (x3 - x2) * t, cy = y2 + (y3 - y2) * t;
+    const dx = ax + (bx - ax) * t, dy = ay + (by - ay) * t;
+    const ex = bx + (cx - bx) * t, ey = by + (cy - by) * t;
+    const gx = dx + (ex - dx) * t, gy = dy + (ey - dy) * t;
+
+    fora.push(`M${f(x0)},${f(y0)}C${f(ax)},${f(ay)} ${f(dx)},${f(dy)} ${f(gx)},${f(gy)}`);
+
+    x0 = gx; y0 = gy;
+    x1 = ex; y1 = ey;
+    x2 = cx; y2 = cy;
   }
   return fora;
 }
@@ -1106,7 +1185,12 @@ function hsLinhaFatiar(emPixels){
   hsLinha.ativa = -1;
 
   let acumulado = 0;
-  for (const d of linhaSegmentos(emPixels)) {
+  const ds = [];
+  for (const seg of linhaSegmentos(emPixels)) {
+    for (const d of linhaSubdividir(seg, LINHA_PEDACOS)) ds.push(d);
+  }
+
+  for (const d of ds) {
     const el = document.createElementNS(LINHA_NS, 'path');
     el.setAttribute('d', d);
     hsLinha.svg.appendChild(el);
@@ -1771,6 +1855,25 @@ hsRefazerLayout();
 Agenda.scroll(hsUpdate);      // mede
 Agenda.pintar(hsRender);      // desenha, depois de todas as medidas
 
+/* A CAMADA DE GPU DO TRILHO SÓ EXISTE PERTO DA SEÇÃO.
+
+   O `will-change: transform` do `.hs-track` (css/estilo.css) reserva uma
+   camada de 5 telas de largura. Deixá-la de pé a visita inteira é memória de
+   vídeo parada por causa de uma seção que ocupa um quinto da página — e num
+   celular é justamente essa memória que falta.
+
+   A margem é de UMA TELA para cada lado: a camada nasce e morre longe da
+   vista, então o repintar que a troca custa nunca cai num quadro que alguém
+   esteja olhando. Sem observer (navegador antigo), a classe entra de vez e o
+   comportamento volta a ser o de antes — nada quebra. */
+(function hsPromoverTrilho(){
+  if (!('IntersectionObserver' in window)) { hsOuter.classList.add('hs-perto'); return; }
+
+  new IntersectionObserver((entradas) => {
+    hsOuter.classList.toggle('hs-perto', entradas[0].isIntersecting);
+  }, { rootMargin: '100% 0px' }).observe(hsOuter);
+})();
+
 /* Aqui havia um SEGUNDO ouvinte de scroll chamando `atualizarProgressoPaineis`
    direto, sem passar por requestAnimationFrame nenhum — ou seja, medindo o
    layout a cada evento de scroll, que chega bem mais vezes que quadro. E era
@@ -2040,7 +2143,12 @@ window.addEventListener('load', () => {
 
     let mouseX = 0, mouseY = 0, olharAgendado = false;
 
+    /* O SEGUNDO laço que perdeu o rAF próprio — mesma história do parallax do
+       menu. `olhoCx`/`olhoCy` já vinham da passada de MEDIDA da Agenda (ali
+       em cima), então aqui não há leitura de layout nenhuma: é só conta e uma
+       escrita de `transform`. Lugar certo, passada de desenho. */
     function aplicarOlhar(){
+      if (!olharAgendado) return;
       olharAgendado = false;
 
       const dx = mouseX - olhoCx;
@@ -2055,6 +2163,8 @@ window.addEventListener('load', () => {
       eyeLook.style.transform = `translate(${offsetX.toFixed(2)}px, ${offsetY.toFixed(2)}px)`;
     }
 
+    Agenda.pintar(aplicarOlhar);
+
     window.addEventListener('mousemove', (e) => {
       if (!eyeVisivel) return;
       mouseX = e.clientX;
@@ -2062,7 +2172,7 @@ window.addEventListener('load', () => {
 
       if (!olharAgendado) {
         olharAgendado = true;
-        requestAnimationFrame(aplicarOlhar);
+        Agenda.pedirQuadro();
       }
     }, { passive: true });
   }
@@ -2070,40 +2180,60 @@ window.addEventListener('load', () => {
 
 
 /* =========================================================================
-   STACK — velocidade constante do marquee (px/segundo)
-   Como cada linha tem uma quantidade de texto diferente, usar a mesma
-   duração (ex: 34s) pra todas fazia cada uma "andar" numa velocidade
-   visual diferente. Aqui calculamos a duração de cada linha com base na
-   largura real do conteúdo, garantindo que todas rodem na mesma velocidade.
+   STACK — a duração das faixas, medida uma vez
+
+   As quatro linhas têm quantidades diferentes de texto. Uma duração única
+   faria cada uma andar numa velocidade visual diferente, então a duração de
+   cada uma sai da largura real do seu conteúdo — é a mesma ideia de antes.
+
+   O QUE MUDOU: isto é TUDO o que restou de JavaScript nos marquees. O sistema
+   que reagia à velocidade do scroll (playbackRate por quadro, rAF próprio,
+   inversão de sentido) saiu inteiro do js/efeitos.js; a animação em si é
+   `animation: stackMarquee` no css/estilo.css e roda no compositor, sem
+   acordar a thread principal uma vez sequer.
+
+   Esta função não roda em quadro nenhum de rolagem: ela mede no `load`, no
+   `fonts.ready` e no resize — três vezes numa visita inteira. E mede QUATRO
+   trilhas, não oito: as duas de cada faixa são cópias idênticas, então a
+   segunda leitura só repetia a primeira.
+
+   Medir tudo antes de escrever qualquer coisa é de propósito: intercalar
+   `getBoundingClientRect` com escrita de estilo obrigaria o navegador a
+   resolver o layout a cada volta do laço.
    ========================================================================= */
 
-(function syncStackMarqueeSpeed(){
-  const PX_PER_SECOND = 90; // ajuste aqui pra deixar tudo mais rápido ou mais devagar
-  const marquees = document.querySelectorAll('.stack-marquee');
-  if (!marquees.length) return;
+(function marqueeVelocidade(){
+  /* px por segundo. Calibrado no ritmo que as faixas JÁ tinham na tela
+     (~128px/s), e não no valor que o código antigo pretendia: ele media antes
+     de as fontes de ícone chegarem e nunca alcançava o número que pedia. */
+  const PX_POR_SEGUNDO = 128;
 
-  function applySpeed(){
-    marquees.forEach((marquee) => {
-      const track = marquee.querySelector('.stack-marquee-track');
-      if (!track) return;
+  const faixas = Array.from(document.querySelectorAll('.stack-marquee'));
+  if (!faixas.length) return;
 
-      const trackWidth = track.getBoundingClientRect().width;
-      const duration = trackWidth / PX_PER_SECOND;
+  const larguras = new Array(faixas.length);
 
-      marquee.querySelectorAll('.stack-marquee-track').forEach((t) => {
-        t.style.animationDuration = `${duration}s`;
-      });
-    });
+  function medir(){
+    for (let i = 0; i < faixas.length; i++) {
+      const trilha = faixas[i].firstElementChild;
+      larguras[i] = trilha ? trilha.getBoundingClientRect().width : 0;
+    }
+    for (let i = 0; i < faixas.length; i++) {
+      if (larguras[i] > 0) {
+        faixas[i].style.setProperty(
+          '--marquee-dur', (larguras[i] / PX_POR_SEGUNDO).toFixed(2) + 's');
+      }
+    }
   }
 
-  /* só o evento `load` não bastava: as fontes (JetBrains Mono / Font Awesome /
+  /* só o `load` não bastava: as fontes (JetBrains Mono / Font Awesome /
      devicon) costumam chegar DEPOIS dele, e é a fonte que define a largura
-     real do texto. Medindo cedo demais, a velocidade saía calculada em cima
-     da fonte de fallback e cada linha andava num ritmo diferente. */
-  window.addEventListener('load', applySpeed, { once: true });
-  Agenda.resize(applySpeed);
-  if (document.fonts) document.fonts.ready.then(applySpeed);
-  applySpeed();
+     real do texto. Medindo cedo demais, a velocidade sai calculada em cima da
+     fonte de fallback e cada linha anda num ritmo diferente. */
+  window.addEventListener('load', medir, { once: true });
+  Agenda.resize(medir);
+  if (document.fonts) document.fonts.ready.then(medir);
+  medir();
 })();
 
 
@@ -2214,6 +2344,27 @@ window.addEventListener('load', () => {
 
   let agendado = false;
 
+  /* O ÚLTIMO PROGRESSO QUE VIROU ESCRITA.
+
+     Sem isto, as 57 palavras recebiam `currentTime` em TODO quadro de rolagem
+     da página inteira — inclusive dentro do scroll horizontal, com o parágrafo
+     três telas abaixo e o `p` grudado em 0 o tempo todo. Escrever `currentTime`
+     invalida o estilo daquele elemento, e são 57 deles com `filter: blur()` nos
+     seus quadros: trabalho puro jogado fora, no quadro de outra seção.
+
+     A comparação apaga isso inteiro. Acima do parágrafo o `p` fica em 0 e
+     abaixo em 1; nos dois casos a primeira escrita é a única.
+
+     O passo de 1/500 é o mesmo do jardim do scroll horizontal, e pelo mesmo
+     motivo: com quatro casas decimais praticamente todo quadro trazia um
+     número diferente e pagava a invalidação inteira, mesmo na cauda em que a
+     rolagem anda frações de pixel. Em 500 degraus o efeito segue contínuo ao
+     olho. */
+  let bioDesenhado = -1;
+
+  /* `p` medido neste quadro, à espera da passada de desenho. */
+  let bioPendente = -1;
+
   /* O topo do parágrafo e o último pixel rolável só mudam quando a página muda
      de tamanho — não a cada quadro. Medidos aqui uma vez, saem do caminho do
      scroll: eram um getBoundingClientRect e um scrollHeight (leituras de
@@ -2254,21 +2405,44 @@ window.addEventListener('load', () => {
     let p = curso > 0 ? (y - inicio) / curso : 1;
     p = Math.min(1, Math.max(0, p));
 
+    bioPendente = Math.round(p * 500) / 500;
+  }
+
+  /* ESCREVE — e só na passada de DESENHO.
+
+     Aqui estava a última inversão de ordem que sobrava nesta página:
+     `posicionarPalavras` era chamada de dentro do `medir`, que roda na passada
+     de MEDIDA da Agenda. Escrever estilo no meio das medidas suja a árvore
+     para todo mundo que ainda vai medir depois — e o js/efeitos.js carrega
+     DEPOIS deste arquivo, então os `getBoundingClientRect` do ímã, do retrato
+     e da pausa fora-da-tela vinham logo em seguida e obrigavam o navegador a
+     recalcular o estilo ali mesmo, em todo quadro de rolagem da página.
+
+     Medida numa passada, escrita na outra: é a regra da Agenda, e este era o
+     único módulo que ainda a quebrava. */
+  function aplicar(){
+    if (bioPendente < 0 || bioPendente === bioDesenhado) return;
     if (!animacoes.length && !pegarAnimacoes()) return;
-    posicionarPalavras(p);
+    bioDesenhado = bioPendente;
+    posicionarPalavras(bioPendente);
   }
 
   Agenda.scroll(medir);
-  Agenda.resize(() => { medirGeometriaBio(); medir(); });
+  Agenda.pintar(aplicar);
+  Agenda.resize(() => { medirGeometriaBio(); medir(); aplicar(); });
+
+  /* Fora de um quadro da Agenda não há duas passadas onde se apoiar: aqui
+     mede-se e escreve-se em seguida, na mesma chamada. */
+  function pintar(){ medir(); aplicar(); }
 
   /* a altura da página só assenta depois das fontes e do hsLayout */
-  window.addEventListener('load', () => { medirGeometriaBio(); medir(); }, { once: true });
-  if (document.fonts) document.fonts.ready.then(() => { medirGeometriaBio(); medir(); });
+  window.addEventListener('load', () => { medirGeometriaBio(); pintar(); }, { once: true });
+  if (document.fonts) document.fonts.ready.then(() => { medirGeometriaBio(); pintar(); });
 
   /* A animação só existe depois que o CSS da .bio-scrub foi aplicado, o que
      não acontece no mesmo instante em que a classe entra. Estas tentativas
      cobrem o intervalo; a partir daí o `medir` cuida sozinho. */
-  requestAnimationFrame(() => { pegarAnimacoes(); medir(); });
-  setTimeout(() => { pegarAnimacoes(); medir(); }, 400);
-  medir();
+  requestAnimationFrame(() => { pegarAnimacoes(); pintar(); });
+  setTimeout(() => { pegarAnimacoes(); pintar(); }, 400);
+  pintar();
 })();

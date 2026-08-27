@@ -292,6 +292,21 @@ body{
   height: 100vh;
   height: 100svh;
   width: max-content;
+}
+
+/* O `will-change` NÃO VALE A PÁGINA INTEIRA.
+
+   O trilho tem 5 telas de largura — 6400x720 num monitor de 1280, o dobro
+   disso em cada eixo num aparelho com DPR 2. `will-change: transform` manda o
+   navegador manter isso promovido a camada de GPU e rasterizado, e ele
+   obedece desde o primeiro quadro da visita até o último: memória de vídeo
+   parada por causa de uma seção que ocupa um quinto da página.
+
+   A classe é posta e tirada por um IntersectionObserver com margem de uma tela
+   inteira (ver `hsPromoverTrilho`, no js/script.js), então a camada já existe
+   bem antes de a seção aparecer e some bem depois de ela sair. A troca
+   acontece longe da vista, que é o único cuidado que ela pede. */
+.hs-outer.hs-perto .hs-track{
   will-change: transform;
 }
 
@@ -1361,6 +1376,42 @@ body{
   flex-shrink: 0;
 }
 
+/* A SOMBRA DO PANO É UM ELEMENTO PARADO, E NÃO UM `filter` NO .bandeira.
+
+   Antes ela era `filter: drop-shadow()` no .bandeira. Um filtro no PAI obriga
+   o navegador a rasterizar o subtree inteiro numa superfície própria e borrar
+   o alfa dela — e o subtree aqui são 34 fatias que se mexem em 3D em todo
+   quadro. Ou seja: re-rasterizar e re-borrar as duas bandeiras 60 vezes por
+   segundo, o quadro inteiro, só para uma sombra de 32% de opacidade.
+
+   Aqui a sombra é um retângulo do tamanho do pano, borrado uma vez e guardado
+   na sua camada. Ele não anima, então nunca é repintado: custo por quadro
+   zero. O que se perde é a sombra ondular junto com a dobra; a 32% de alfa e
+   8px de borrão isso não se vê.
+
+   A ordem do transform importa: o `translate` do deslocamento vem ANTES do
+   `rotate` na lista, então ele é aplicado DEPOIS na composição — o desvio de
+   4/6px acontece no eixo da tela, igual ao drop-shadow original, e não no
+   eixo girado do pano. */
+.pano::before{
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: 50%;
+  left: 50%;
+  width: var(--comp);
+  height: var(--larg);
+  transform: translate(-50%, -50%) translate(4px, 6px) rotate(90deg);
+  background: rgba(14, 15, 14, .32);
+  /* drop-shadow(... 8px) usa RAIO; blur() usa desvio-padrão, que é metade */
+  filter: blur(4px);
+  pointer-events: none;
+}
+
+.idioma--dir .pano::before{
+  transform: translate(-50%, -50%) translate(4px, 6px) rotate(-90deg);
+}
+
 /* ---------- o pano ---------- */
 
 .bandeira{
@@ -1378,7 +1429,7 @@ body{
   /* a perspectiva mora AQUI, no pano, com o ponto de fuga na beirada presa */
   perspective: 460px;
   perspective-origin: 0% 50%;
-  filter: drop-shadow(4px 6px 8px rgba(14, 15, 14, .32));
+  /* SEM `filter` AQUI — ver .pano::before acima. */
 }
 
 .idioma--dir .bandeira{
@@ -1414,52 +1465,47 @@ body{
      debaixo da vizinha. */
   --emenda: 12px;
 
-  /* Sombra junto da tralha. Em foto de bandeira o pano sempre fecha mais
-     escuro onde está amarrado — é ali que ele amassa e sobra tecido — e vai
-     abrindo até a ponta solta. Sem isso o pano fica com cara de adesivo.
-
-     Ela é CAMADA DE FUNDO DA FATIA, e não um véu por cima da bandeira inteira,
-     justamente para dobrar junto com o tecido e ficar recortada na fatia. Um
-     véu inteiriço volta a ser aquele retângulo chapado. */
-  --sombra-tralha: linear-gradient(90deg,
-    rgba(90, 92, 88, .34) 0%,
-    rgba(90, 92, 88, .12) 14%,
-    rgba(90, 92, 88, 0)  38%);
-
   flex: 0 0 auto;
   width: calc(var(--comp) / 34 + var(--emenda));
   margin-right: calc(var(--emenda) * -1);
 
-  /* As duas camadas usam o MESMO tamanho e a MESMA posição: a sombra é medida
-     na bandeira inteira, igual ao desenho, e cada fatia mostra o seu pedaço
-     das duas. Assim o degradê atravessa o pano sem emenda. */
-  background-image: var(--sombra-tralha), var(--pano-img);
+  /* UMA CAMADA DE FUNDO, NÃO DUAS — e a sombra da tralha mora DENTRO da
+     imagem.
+
+     Aqui havia `background-image: var(--sombra-tralha), var(--pano-img)` com
+     `background-blend-mode: multiply, normal`. Três custos de uma vez:
+
+       · duas camadas dobram `background-size` e `background-position`, e os
+         dois são `calc(var(--comp) ...)` — resolvidos em 68 elementos a cada
+         recálculo de estilo;
+       · `background-blend-mode` tira a fatia do caminho rápido de pintura;
+       · o próprio `var(--pano-img)` é uma indireção cara: a variável guarda
+         3KB de data-URI em TOKENS, e cada recálculo de estilo torna a
+         substituí-los e reprocessá-los nas 68 fatias. Medido nesta página:
+         2,8ms por recálculo só nessa substituição.
+
+     O degradê da tralha agora é um <rect> dentro do próprio SVG da bandeira,
+     com a mesma curva de alfa (o multiply de cinza .34/.12 equivale a preto
+     em .22/.078 — mesma conta, mesmo resultado na tela). Ele fatia junto com o
+     desenho porque é o mesmo desenho, então continua dobrando com o tecido —
+     que era a razão de ele ser camada de fatia e não véu por cima.
+
+     A imagem é declarada direto em `.bandeira--br .fio` / `.bandeira--us .fio`,
+     sem passar por variável nenhuma. */
   background-repeat: no-repeat;
-  background-size: var(--comp) var(--larg), var(--comp) var(--larg);
-  /* cada fatia puxa o seu pedaço da mesma imagem */
-  background-position: calc(var(--f) * (var(--comp) / -34)) 0,
-                       calc(var(--f) * (var(--comp) / -34)) 0;
-  background-blend-mode: multiply, normal;
+  background-size: var(--comp) var(--larg);
+  background-position: calc(var(--f) * (var(--comp) / -34)) 0;
 
   transform-origin: center left;
   backface-visibility: hidden;
 }
 
-/* Mesma ideia: 68 camadas de GPU, uma por fatia, ficavam reservadas desde o
-   carregamento por causa de duas bandeiras que só aparecem lá pela metade da
-   página. A camada agora nasce junto com a animação e some com ela. */
-.idioma:not(.fora-da-tela) .fio{
-  will-change: transform;
-}
-
-/* Na bandeira da direita quem encosta no mastro é a beirada OPOSTA — o giro de
-   -90° põe a outra ponta lá em cima. A sombra vira de lado junto. */
-.idioma--dir .fio{
-  --sombra-tralha: linear-gradient(270deg,
-    rgba(90, 92, 88, .34) 0%,
-    rgba(90, 92, 88, .12) 14%,
-    rgba(90, 92, 88, 0)  38%);
-}
+/* O `will-change: transform` que ficava aqui saiu. Ele era redundante: uma
+   animação de transform em curso JÁ promove o elemento a camada própria, e o
+   `will-change` só adiantava isso — ao preço de manter 68 camadas de pé
+   enquanto a seção estivesse na tela, mesmo com a animação pausada.
+   A sombra da tralha da bandeira da direita também saiu daqui: ela agora vem
+   virada de lado dentro do próprio SVG de `.bandeira--us`. */
 
 /* a última não invade ninguém — passaria da beirada solta do pano */
 .fio:last-of-type{
@@ -1471,9 +1517,17 @@ body{
 
 /* Bandeira desenhada pela especificação, em módulos: SVG embutido, sem CDN e
    sem requisição. */
-.bandeira--br{ --pano-img: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 14'><rect width='20' height='14' fill='%23009c3b'/><path d='M10 1.7 18.3 7 10 12.3 1.7 7Z' fill='%23ffdf00'/><circle cx='10' cy='7' r='3.5' fill='%23002776'/><g fill='%23fff'><circle cx='7.143' cy='6.371' r='.15'/><circle cx='7.452' cy='7.843' r='.15'/><circle cx='7.024' cy='8.157' r='.125'/><circle cx='7.795' cy='7.629' r='.071'/><circle cx='8.181' cy='8.19' r='.125'/><circle cx='8.076' cy='8.538' r='.1'/><circle cx='11.086' cy='5.914' r='.15'/><circle cx='12.452' cy='8.229' r='.15'/><circle cx='12.938' cy='8.262' r='.1'/><circle cx='12.595' cy='8.538' r='.125'/><circle cx='11.752' cy='9.271' r='.125'/><circle cx='11.748' cy='9.624' r='.1'/><circle cx='12.1' cy='8.995' r='.1'/><circle cx='12.381' cy='8.819' r='.125'/><circle cx='11.738' cy='8.929' r='.1'/><circle cx='8.667' cy='7.143' r='.125'/><circle cx='10.952' cy='6.824' r='.1'/><circle cx='10' cy='8.571' r='.15'/><circle cx='10.405' cy='7.876' r='.125'/><circle cx='10' cy='7.562' r='.125'/><circle cx='9.648' cy='7.876' r='.1'/><circle cx='9.824' cy='8.119' r='.071'/><circle cx='11.048' cy='9.357' r='.125'/><circle cx='11.348' cy='9.048' r='.1'/><circle cx='10.771' cy='8.962' r='.1'/><circle cx='8.595' cy='8.857' r='.15'/><circle cx='10' cy='9.738' r='.05'/></g><path d='M6.798 5.585A8.5 8.5 0 0 1 13.466 7.49A3.5 3.5 0 0 1 13.341 8.044A8 8 0 0 0 6.612 6.121A3.5 3.5 0 0 1 6.798 5.585Z' fill='%23fff'/></svg>"); }
+/* Bandeira desenhada pela especificação, em módulos: SVG embutido, sem CDN e
+   sem requisição. O último <rect> de cada uma é a sombra da tralha — ver o
+   comentário do `.fio`: ela vive dentro do desenho para fatiar (e dobrar)
+   junto com ele, sem custar uma segunda camada de fundo.
 
-.bandeira--us{ --pano-img: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 14'><rect width='20' height='14' fill='%23fff'/><rect y='0.0' width='20' height='1.077' fill='%23b31942'/><rect y='2.154' width='20' height='1.077' fill='%23b31942'/><rect y='4.308' width='20' height='1.077' fill='%23b31942'/><rect y='6.462' width='20' height='1.077' fill='%23b31942'/><rect y='8.615' width='20' height='1.077' fill='%23b31942'/><rect y='10.769' width='20' height='1.077' fill='%23b31942'/><rect y='12.923' width='20' height='1.077' fill='%23b31942'/><rect width='8.0' height='7.538' fill='%230a3161'/><g fill='%23fff'><circle cx='0.667' cy='0.754' r='.165'/><circle cx='2.0' cy='0.754' r='.165'/><circle cx='3.333' cy='0.754' r='.165'/><circle cx='4.667' cy='0.754' r='.165'/><circle cx='6.0' cy='0.754' r='.165'/><circle cx='7.333' cy='0.754' r='.165'/><circle cx='1.333' cy='1.508' r='.165'/><circle cx='2.667' cy='1.508' r='.165'/><circle cx='4.0' cy='1.508' r='.165'/><circle cx='5.333' cy='1.508' r='.165'/><circle cx='6.667' cy='1.508' r='.165'/><circle cx='0.667' cy='2.262' r='.165'/><circle cx='2.0' cy='2.262' r='.165'/><circle cx='3.333' cy='2.262' r='.165'/><circle cx='4.667' cy='2.262' r='.165'/><circle cx='6.0' cy='2.262' r='.165'/><circle cx='7.333' cy='2.262' r='.165'/><circle cx='1.333' cy='3.015' r='.165'/><circle cx='2.667' cy='3.015' r='.165'/><circle cx='4.0' cy='3.015' r='.165'/><circle cx='5.333' cy='3.015' r='.165'/><circle cx='6.667' cy='3.015' r='.165'/><circle cx='0.667' cy='3.769' r='.165'/><circle cx='2.0' cy='3.769' r='.165'/><circle cx='3.333' cy='3.769' r='.165'/><circle cx='4.667' cy='3.769' r='.165'/><circle cx='6.0' cy='3.769' r='.165'/><circle cx='7.333' cy='3.769' r='.165'/><circle cx='1.333' cy='4.523' r='.165'/><circle cx='2.667' cy='4.523' r='.165'/><circle cx='4.0' cy='4.523' r='.165'/><circle cx='5.333' cy='4.523' r='.165'/><circle cx='6.667' cy='4.523' r='.165'/><circle cx='0.667' cy='5.277' r='.165'/><circle cx='2.0' cy='5.277' r='.165'/><circle cx='3.333' cy='5.277' r='.165'/><circle cx='4.667' cy='5.277' r='.165'/><circle cx='6.0' cy='5.277' r='.165'/><circle cx='7.333' cy='5.277' r='.165'/><circle cx='1.333' cy='6.031' r='.165'/><circle cx='2.667' cy='6.031' r='.165'/><circle cx='4.0' cy='6.031' r='.165'/><circle cx='5.333' cy='6.031' r='.165'/><circle cx='6.667' cy='6.031' r='.165'/><circle cx='0.667' cy='6.785' r='.165'/><circle cx='2.0' cy='6.785' r='.165'/><circle cx='3.333' cy='6.785' r='.165'/><circle cx='4.667' cy='6.785' r='.165'/><circle cx='6.0' cy='6.785' r='.165'/><circle cx='7.333' cy='6.785' r='.165'/></g></svg>"); }
+   A URL vai DIRETO na regra, e não por uma variável. Uma custom property
+   guarda tokens crus: cada recálculo de estilo tornaria a substituir esses
+   3KB nas 34 fatias. Escrita aqui, a imagem é resolvida uma vez. */
+.bandeira--br .fio{ background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 14'><defs><linearGradient id='t' x1='0' y1='0' x2='1' y2='0'><stop offset='0' stop-color='%23000' stop-opacity='.22'/><stop offset='.14' stop-color='%23000' stop-opacity='.078'/><stop offset='.38' stop-color='%23000' stop-opacity='0'/></linearGradient></defs><rect width='20' height='14' fill='%23009c3b'/><path d='M10 1.7 18.3 7 10 12.3 1.7 7Z' fill='%23ffdf00'/><circle cx='10' cy='7' r='3.5' fill='%23002776'/><g fill='%23fff'><circle cx='7.143' cy='6.371' r='.15'/><circle cx='7.452' cy='7.843' r='.15'/><circle cx='7.024' cy='8.157' r='.125'/><circle cx='7.795' cy='7.629' r='.071'/><circle cx='8.181' cy='8.19' r='.125'/><circle cx='8.076' cy='8.538' r='.1'/><circle cx='11.086' cy='5.914' r='.15'/><circle cx='12.452' cy='8.229' r='.15'/><circle cx='12.938' cy='8.262' r='.1'/><circle cx='12.595' cy='8.538' r='.125'/><circle cx='11.752' cy='9.271' r='.125'/><circle cx='11.748' cy='9.624' r='.1'/><circle cx='12.1' cy='8.995' r='.1'/><circle cx='12.381' cy='8.819' r='.125'/><circle cx='11.738' cy='8.929' r='.1'/><circle cx='8.667' cy='7.143' r='.125'/><circle cx='10.952' cy='6.824' r='.1'/><circle cx='10' cy='8.571' r='.15'/><circle cx='10.405' cy='7.876' r='.125'/><circle cx='10' cy='7.562' r='.125'/><circle cx='9.648' cy='7.876' r='.1'/><circle cx='9.824' cy='8.119' r='.071'/><circle cx='11.048' cy='9.357' r='.125'/><circle cx='11.348' cy='9.048' r='.1'/><circle cx='10.771' cy='8.962' r='.1'/><circle cx='8.595' cy='8.857' r='.15'/><circle cx='10' cy='9.738' r='.05'/></g><path d='M6.798 5.585A8.5 8.5 0 0 1 13.466 7.49A3.5 3.5 0 0 1 13.341 8.044A8 8 0 0 0 6.612 6.121A3.5 3.5 0 0 1 6.798 5.585Z' fill='%23fff'/><rect width='20' height='14' fill='url(%23t)'/></svg>"); }
+
+.bandeira--us .fio{ background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 14'><defs><linearGradient id='t' x1='1' y1='0' x2='0' y2='0'><stop offset='0' stop-color='%23000' stop-opacity='.22'/><stop offset='.14' stop-color='%23000' stop-opacity='.078'/><stop offset='.38' stop-color='%23000' stop-opacity='0'/></linearGradient></defs><rect width='20' height='14' fill='%23fff'/><rect y='0.0' width='20' height='1.077' fill='%23b31942'/><rect y='2.154' width='20' height='1.077' fill='%23b31942'/><rect y='4.308' width='20' height='1.077' fill='%23b31942'/><rect y='6.462' width='20' height='1.077' fill='%23b31942'/><rect y='8.615' width='20' height='1.077' fill='%23b31942'/><rect y='10.769' width='20' height='1.077' fill='%23b31942'/><rect y='12.923' width='20' height='1.077' fill='%23b31942'/><rect width='8.0' height='7.538' fill='%230a3161'/><g fill='%23fff'><circle cx='0.667' cy='0.754' r='.165'/><circle cx='2.0' cy='0.754' r='.165'/><circle cx='3.333' cy='0.754' r='.165'/><circle cx='4.667' cy='0.754' r='.165'/><circle cx='6.0' cy='0.754' r='.165'/><circle cx='7.333' cy='0.754' r='.165'/><circle cx='1.333' cy='1.508' r='.165'/><circle cx='2.667' cy='1.508' r='.165'/><circle cx='4.0' cy='1.508' r='.165'/><circle cx='5.333' cy='1.508' r='.165'/><circle cx='6.667' cy='1.508' r='.165'/><circle cx='0.667' cy='2.262' r='.165'/><circle cx='2.0' cy='2.262' r='.165'/><circle cx='3.333' cy='2.262' r='.165'/><circle cx='4.667' cy='2.262' r='.165'/><circle cx='6.0' cy='2.262' r='.165'/><circle cx='7.333' cy='2.262' r='.165'/><circle cx='1.333' cy='3.015' r='.165'/><circle cx='2.667' cy='3.015' r='.165'/><circle cx='4.0' cy='3.015' r='.165'/><circle cx='5.333' cy='3.015' r='.165'/><circle cx='6.667' cy='3.015' r='.165'/><circle cx='0.667' cy='3.769' r='.165'/><circle cx='2.0' cy='3.769' r='.165'/><circle cx='3.333' cy='3.769' r='.165'/><circle cx='4.667' cy='3.769' r='.165'/><circle cx='6.0' cy='3.769' r='.165'/><circle cx='7.333' cy='3.769' r='.165'/><circle cx='1.333' cy='4.523' r='.165'/><circle cx='2.667' cy='4.523' r='.165'/><circle cx='4.0' cy='4.523' r='.165'/><circle cx='5.333' cy='4.523' r='.165'/><circle cx='6.667' cy='4.523' r='.165'/><circle cx='0.667' cy='5.277' r='.165'/><circle cx='2.0' cy='5.277' r='.165'/><circle cx='3.333' cy='5.277' r='.165'/><circle cx='4.667' cy='5.277' r='.165'/><circle cx='6.0' cy='5.277' r='.165'/><circle cx='7.333' cy='5.277' r='.165'/><circle cx='1.333' cy='6.031' r='.165'/><circle cx='2.667' cy='6.031' r='.165'/><circle cx='4.0' cy='6.031' r='.165'/><circle cx='5.333' cy='6.031' r='.165'/><circle cx='6.667' cy='6.031' r='.165'/><circle cx='0.667' cy='6.785' r='.165'/><circle cx='2.0' cy='6.785' r='.165'/><circle cx='3.333' cy='6.785' r='.165'/><circle cx='4.667' cy='6.785' r='.165'/><circle cx='6.0' cy='6.785' r='.165'/><circle cx='7.333' cy='6.785' r='.165'/></g><rect width='20' height='14' fill='url(%23t)'/></svg>"); }
 
 /* ---------- a tremulação ---------- */
 
@@ -1497,10 +1551,21 @@ body{
   initial-value: 1;
 }
 
+/* SÓ `transform`. O `filter: brightness()` que acompanhava cada quadro saiu.
+
+   Ele era o reflexo do tecido, e custava caro em dois lugares ao mesmo tempo:
+   68 operações de filtro por quadro na GPU, e 1,9ms por recálculo de estilo na
+   CPU (medido nesta página). `transform` sozinho é a única propriedade que o
+   compositor anima sem tocar em estilo, layout nem pintura — as 68 fatias
+   passam a custar uma matriz cada, e nada mais.
+
+   O que sustenta a leitura de tecido continua inteiro: a rampa de amplitude
+   (--amp) prende o pano no mastro, o rotateY em perspectiva faz a dobra, e o
+   degradê da tralha — agora dentro do próprio SVG — dá o escurecido de quem
+   está amarrado. */
 @keyframes panoTremula{
   0%, 100%{
     transform: translateZ(0) rotateY(0deg) translateY(0) skewY(0deg);
-    filter: brightness(1);
   }
   25%{
     transform:
@@ -1508,11 +1573,9 @@ body{
       rotateY(calc(var(--amp) * var(--vento) * 30deg))
       translateY(calc(var(--amp) * var(--vento) * -6px))
       skewY(calc(var(--amp) * var(--vento) * 4deg));
-    filter: brightness(calc(1 + var(--amp) * 0.16));
   }
   50%{
     transform: translateZ(0) rotateY(0deg) translateY(0) skewY(0deg);
-    filter: brightness(1);
   }
   75%{
     transform:
@@ -1520,7 +1583,6 @@ body{
       rotateY(calc(var(--amp) * var(--vento) * -30deg))
       translateY(calc(var(--amp) * var(--vento) * 6px))
       skewY(calc(var(--amp) * var(--vento) * -4deg));
-    filter: brightness(calc(1 - var(--amp) * 0.2));
   }
 }
 
@@ -1631,10 +1693,22 @@ body{
 
   .idioma:hover{ --vento: 1.5; }
 
-  .bandeira{ transition: filter .45s ease-out; }
+  /* a sombra que cresce no hover é o retângulo parado do .pano::before, não
+     um `filter` no pano — ver o comentário de lá */
+  .pano::before{
+    transition: transform .45s ease-out,
+                background-color .45s ease-out,
+                filter .45s ease-out;
+  }
 
-  .idioma:hover .bandeira{
-    filter: drop-shadow(7px 11px 14px rgba(14, 15, 14, .42));
+  .idioma:hover .pano::before{
+    transform: translate(-50%, -50%) translate(7px, 11px) rotate(90deg);
+    background: rgba(14, 15, 14, .42);
+    filter: blur(7px);
+  }
+
+  .idioma--dir:hover .pano::before{
+    transform: translate(-50%, -50%) translate(7px, 11px) rotate(-90deg);
   }
 
   /* a ponteira do mastro dá uma inchada, como se o mastro vibrasse junto */
@@ -1673,6 +1747,33 @@ body{
   /* no estreito o título passa pra cima e as bandeiras dividem a linha */
   .stack-topo .stack-title{ grid-column: 1 / -1; order: -1; }
   .idioma{ --comp: clamp(100px, 27vw, 155px); }
+
+  /* METADE DAS FATIAS NO CELULAR — 17 por bandeira em vez de 34.
+
+     A regra do desktop está no comentário do `.bandeira`: 34 fatias existem
+     porque o salto de ângulo entre vizinhas cai para ~1,2°, e abaixo de um
+     grau o olho lê curva em vez de polígono. Só que essa conta é feita em
+     GRAUS, não em pixels — e aqui o pano tem 100 a 155px em vez de 205px, numa
+     tela que se olha de perto mas é fisicamente pequena. Com 17 fatias o salto
+     vai a ~2,4° num pano de um terço do tamanho: continua sem faceta visível.
+
+     O que se ganha é o dobro do que parece. Cada fatia animada é uma camada de
+     composição própria, com a sua textura e o seu nó no compositor. Cortar de
+     68 para 34 corta pela metade as camadas, as animações e o trabalho por
+     quadro das bandeiras — exatamente no aparelho onde isso pesa.
+
+     COMO A CONTA CONTINUA FECHANDO: escondendo as fatias de `--f` ÍMPAR e
+     dobrando a largura das que ficam, cada uma passa a mostrar dois
+     trinta-e-quatro avos da imagem em vez de um. O `background-position` já é
+     `--f * (--comp / -34)`, então a fatia `--f: 2k` começa exatamente onde
+     antes começava e agora termina onde a vizinha escondida terminava: o
+     desenho continua contínuo, sem reposicionar nada.
+
+     A rampa de amplitude e o atraso da onda também seguem valendo — os dois
+     saem de `--f`/`--amp`, que vêm do HTML e não mudaram. */
+  .idioma .fio:nth-child(even){ display: none; }
+
+  .idioma .fio{ width: calc(var(--comp) / 17 + var(--emenda)); }
 }
 
 @media (prefers-reduced-motion: reduce){
@@ -1748,28 +1849,48 @@ body{
   flex-shrink: 0;
   gap: var(--vao);
   padding-right: var(--vao);
+
+  /* A FAIXA É UMA ANIMAÇÃO DE CSS, E SÓ ISSO.
+
+     Aqui havia um sistema inteiro por cima: um `Agenda.pintar` lia a posição
+     da página em todo quadro, calculava o delta, transformava em multiplicador
+     de velocidade e escrevia `playbackRate` nas 8 trilhas; um
+     requestAnimationFrame próprio ficava rodando atrás disso pra desacelerar
+     de volta; e um IntersectionObserver decidia quando ligar. Rolando pra
+     cima, as faixas ainda invertiam de sentido.
+
+     Nada disso sobreviveu, e o motivo é o de sempre: o navegador roda esta
+     animação no compositor, fora da thread principal — o JavaScript não
+     precisa acordar uma vez sequer para ela andar. Assim que alguém escreve
+     `playbackRate` a cada quadro, a faixa vira trabalho de CPU por quadro e
+     passa a competir com o scroll. O ganho visual não pagava.
+
+     `translate3d` de 0 a -100% da PRÓPRIA caixa: como as duas trilhas irmãs
+     são idênticas, quando a primeira andou a própria largura a segunda está
+     exatamente onde a primeira começou. O laço fecha sem emenda e sem JS.
+
+     A duração vem de `--marquee-dur`, escrito uma vez por medida no
+     js/script.js — ver `marqueeVelocidade` lá. O valor abaixo é só o que vale
+     antes da primeira medida. */
+  animation: stackMarquee var(--marquee-dur, 24s) linear infinite;
 }
 
+/* Um único conjunto de quadros para os dois sentidos: `reverse` toca os mesmos
+   valores de trás pra frente. Com `linear` isso é exatamente a antiga
+   `stackMarqueeRight`, e é uma animação a menos para o navegador guardar. */
+.stack-marquee--right .stack-marquee-track{
+  animation-direction: reverse;
+}
+
+/* Pausar é a única coisa que o hover faz. `animation-play-state` não repinta
+   nada: o compositor simplesmente para de avançar o relógio. */
 .stack-marquee:hover .stack-marquee-track{
   animation-play-state: paused;
 }
 
-.stack-marquee--right .stack-marquee-track{
-  animation: stackMarqueeRight 34s linear infinite;
-}
-
-.stack-marquee--left .stack-marquee-track{
-  animation: stackMarqueeLeft 34s linear infinite;
-}
-
-@keyframes stackMarqueeLeft{
-  0%   { transform: translateX(0%); }
-  100% { transform: translateX(-100%); }
-}
-
-@keyframes stackMarqueeRight{
-  0%   { transform: translateX(-100%); }
-  100% { transform: translateX(0%); }
+@keyframes stackMarquee{
+  from{ transform: translate3d(0, 0, 0); }
+  to  { transform: translate3d(-100%, 0, 0); }
 }
 
 .stack-item{

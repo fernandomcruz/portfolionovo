@@ -224,7 +224,6 @@
     if (!alvos.length || !TEM_MOUSE || MENOS_MOVIMENTO) return;
 
     const RAIO_EXTRA = 70;   // quantos px além da borda o ímã já começa a puxar
-    let agendado = false;
     let mx = 0, my = 0;
 
     /* A posição dos botões na tela só muda com scroll, resize ou quando o
@@ -234,10 +233,14 @@
        Medindo só quando algo de fato mexeu, os quadros de puro movimento do
        mouse viram matemática pura, sem tocar no layout. */
     let medidas = [];
-    let precisaMedir = true;
+    /* `ligado` substituiu o antigo `agendado`. Ele não guarda mais "já pedi um
+       quadro" (quem cuida disso é a Agenda), e sim "há trabalho de ímã a
+       fazer": liga no primeiro mousemove e desliga sozinho quando todos os
+       alvos assentam. É o que mantém o custo em zero enquanto ninguém mexe o
+       mouse. */
+    let ligado = false;
 
     function medir(){
-      precisaMedir = false;
       medidas = [];
 
       for (const el of alvos) {
@@ -262,9 +265,23 @@
        mais nada. */
     const estados = new Map(alvos.map((el) => [el, { x: 0, y: 0, alvoX: 0, alvoY: 0 }]));
 
+    /* O TERCEIRO LAÇO QUE PERDEU O rAF PRÓPRIO — e o mais caro dos três.
+
+       Antes esta função era chamada por um `requestAnimationFrame` disparado
+       no `mousemove`, e a primeira coisa que ela fazia era `medir()`, que é
+       um `getBoundingClientRect` por alvo. Ou seja: uma leitura de layout num
+       instante qualquer do quadro, fora da Agenda — muitas vezes logo DEPOIS
+       de o trilho do scroll horizontal ter escrito o seu transform. Ler layout
+       depois de escrever nele obriga o navegador a recalcular a página ali
+       mesmo, e era o caso mais fácil de reproduzir que havia nesta página:
+       bastava mexer o mouse enquanto rolava, que é o que qualquer pessoa com
+       roda de mouse faz o tempo todo.
+
+       A separação agora é a da Agenda: `medir` na passada de MEDIDA, esta
+       função na de DESENHO, escrevendo só `translate`. Nenhuma leitura de
+       layout sobrou aqui dentro. */
     function atualizar(){
-      agendado = false;
-      if (precisaMedir) medir();
+      if (!ligado) return;
 
       // 1) define pra onde cada botão quer ir
       for (const el of alvos) estados.get(el).alvoX = estados.get(el).alvoY = 0;
@@ -301,27 +318,30 @@
           : '';                                    // parado: devolve ao CSS
       }
 
-      // continua sozinho até tudo assentar — é isso que dá a volta suave
-      if (mexendo && !agendado) {
-        agendado = true;
-        requestAnimationFrame(atualizar);
-      }
+      // continua até tudo assentar — é isso que dá a volta suave. Pede o
+      // próximo quadro pela Agenda, dentro do ciclo de todo mundo.
+      if (mexendo) Agenda.pedirQuadro();
+      else ligado = false;   // tudo parado: o ímã sai da conta por quadro
     }
 
-    const invalidar = () => { precisaMedir = true; };
-    Agenda.scroll(invalidar);
-    Agenda.resize(invalidar);
-    document.getElementById('menu-toggle')?.addEventListener('click', () => {
-      // o menu leva ~1.4s pra assentar; remede quando os ícones pararem
-      setTimeout(invalidar, 1500);
-    });
+    /* MEDE — e só com o ímã ligado.
+
+       O antigo par `precisaMedir`/`invalidar` saiu junto com o rAF próprio, e
+       não fazia falta: ele existia para lembrar que a rolagem, o resize ou a
+       abertura do menu tinham mexido os alvos de lugar. Agora a medida
+       acontece na passada de leitura de todo quadro em que o ímã está ligado,
+       e o ímã só liga com o mouse em movimento — ou seja, ela é sempre do
+       quadro atual, aconteça o que acontecer com a página. Com o mouse parado
+       não há medida nenhuma, que era o outro lado do que o flag protegia. */
+    Agenda.scroll(() => { if (ligado) medir(); });
+    // ESCREVE — depois de todo mundo ter medido
+    Agenda.pintar(atualizar);
 
     window.addEventListener('mousemove', (e) => {
       mx = e.clientX;
       my = e.clientY;
-      if (agendado) return;
-      agendado = true;
-      requestAnimationFrame(atualizar);
+      ligado = true;
+      Agenda.pedirQuadro();
     }, { passive: true });
   })();
 
@@ -418,86 +438,28 @@
 
 
   /* =======================================================================
-     5. STACK — MARQUEE QUE REAGE À VELOCIDADE DO SCROLL
-     Rolando rápido, as faixas disparam; rolando pra cima, elas invertem o
-     sentido. Feito com playbackRate da Web Animations API, então a animação
-     CSS original (e a velocidade calculada no script.js) continuam valendo:
-     o que muda é só o RITMO em que ela toca, sem nenhum pulo na emenda.
+     5. STACK — O MARQUEE NÃO TEM MAIS JAVASCRIPT
+
+     Aqui morava o "marquee reativo": um `Agenda.pintar` que lia a posição da
+     página em todo quadro, virava o delta em multiplicador de velocidade e
+     escrevia `playbackRate` nas 8 trilhas; um requestAnimationFrame próprio
+     que ficava girando atrás disso para desacelerar de volta ao ritmo normal;
+     um IntersectionObserver para ligar e desligar tudo. Rolando pra cima as
+     faixas invertiam de sentido.
+
+     O CUSTO ERA A ARQUITETURA, NÃO O EFEITO. Uma animação de `transform` em
+     CSS roda no compositor: a thread principal não acorda nenhuma vez por
+     quadro para ela existir. Bastava escrever `playbackRate` a cada quadro
+     para trazer as 8 trilhas de volta para a CPU e pô-las a competir com o
+     scroll, que é o único lugar onde as duas coisas se encontram. E, pior, a
+     cadeia era circular: scroll -> lê posição -> escreve nas trilhas -> novo
+     quadro -> lê de novo.
+
+     Removido inteiro. As faixas agora são `animation: stackMarquee ... linear
+     infinite` no css/estilo.css, com a duração medida uma vez (ver
+     `marqueeVelocidade` no js/script.js). O que sobrou de JS para elas é a
+     pausa fora da tela, no item 9 mais abaixo — uma classe, nenhum quadro.
      ===================================================================== */
-
-  (function initMarqueeReativo(){
-    if (MENOS_MOVIMENTO) return;
-
-    const trilhas = Array.from(document.querySelectorAll('.stack-marquee-track'));
-    if (!trilhas.length) return;
-
-    const MAX_BOOST = 5;     // multiplicador máximo de velocidade
-    const SENSIB    = 0.055; // px de scroll -> quanto acelera
-    const VOLTA     = 0.06;  // quão rápido desacelera de volta ao normal
-
-    let ultimoY = Agenda.y;
-    let alvo = 1;            // para onde a velocidade está indo
-    let atual = 1;           // velocidade aplicada agora
-    let rodando = false;
-    let visivel = false;
-
-    /* getAnimations() aloca um array novo a cada chamada. Chamando pras 8
-       trilhas a cada quadro, era lixo de memória sendo gerado 60x por segundo
-       só pra pegar sempre os mesmos objetos. Guardamos as animações uma vez;
-       elas continuam as mesmas mesmo quando o script.js troca a duração. */
-    let anims = null;
-
-    function pegarAnims(){
-      anims = trilhas.flatMap((t) => t.getAnimations());
-    }
-
-    Agenda.resize(() => { anims = null; });
-    if (document.fonts) document.fonts.ready.then(() => { anims = null; });
-
-    function definirRitmo(v){
-      if (!anims) pegarAnims();
-      for (const a of anims) a.playbackRate = v;
-    }
-
-    function quadro(){
-      atual = lerp(atual, alvo, VOLTA);
-      alvo  = lerp(alvo, 1, VOLTA);   // sem scroll, tudo volta ao ritmo normal
-
-      // mexer no playbackRate não reinicia a animação nem quebra o loop
-      definirRitmo(atual);
-
-      if (Math.abs(atual - 1) > 0.01 && visivel) { requestAnimationFrame(quadro); return; }
-
-      atual = 1;
-      definirRitmo(1);
-      rodando = false;
-    }
-
-    /* `Agenda.y` pelo mesmo motivo da barra de progresso acima — e aqui eram
-       DUAS leituras por quadro, não uma. */
-    Agenda.pintar(() => {
-      const y = Agenda.y;
-      const delta = y - ultimoY;
-      ultimoY = y;
-
-      if (!visivel) return;
-
-      // rolando pra cima o sinal fica negativo: as faixas andam ao contrário
-      alvo = clamp(1 + delta * SENSIB, -MAX_BOOST, MAX_BOOST);
-
-      if (rodando) return;
-      rodando = true;
-      requestAnimationFrame(quadro);
-    }, { passive: true });
-
-    const secao = document.querySelector('.stack-section');
-    if (secao) {
-      new IntersectionObserver((entries) => {
-        visivel = entries[0].isIntersecting;
-      }, { threshold: 0 }).observe(secao);
-    }
-  })();
-
 
   /* =======================================================================
      6. IDIOMAS — OS MASTROS ENTRAM PELAS LATERAIS
