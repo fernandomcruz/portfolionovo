@@ -46,7 +46,11 @@
     pintar(fn){ return this.scroll(fn); },
     pedirQuadro(){},
     resize(fn){ window.addEventListener('resize', fn); return fn; },
-    parar(){}
+    parar(){},
+    /* sem a agenda real não há passada para se apoiar: lê na hora */
+    get y(){ return window.scrollY; },
+    get w(){ return window.innerWidth; },
+    get h(){ return window.innerHeight; }
   };
 
   /* A RÉGUA DE VISIBILIDADE TAMBÉM VEM DO js/script.js.
@@ -185,8 +189,14 @@
       alturaRolavel = document.documentElement.scrollHeight - window.innerHeight;
     }
 
+    /* `Agenda.y` e não `window.scrollY`: esta função roda na passada de
+       DESENHO, depois de o trilho do scroll horizontal, o retrato e as classes
+       de pausa já terem escrito. `scrollY` exige layout limpo, então ler aqui
+       obrigava o navegador a refazer o layout no meio das escritas — 0,40ms
+       medidos nesta página. A Agenda já leu a posição uma vez, no começo do
+       quadro, e entrega o mesmo número de graça. */
     function pintar(){
-      const p = alturaRolavel > 0 ? clamp(window.scrollY / alturaRolavel, 0, 1) : 0;
+      const p = alturaRolavel > 0 ? clamp(Agenda.y / alturaRolavel, 0, 1) : 0;
       fill.style.transform = `scaleX(${p})`;
     }
 
@@ -425,7 +435,7 @@
     const SENSIB    = 0.055; // px de scroll -> quanto acelera
     const VOLTA     = 0.06;  // quão rápido desacelera de volta ao normal
 
-    let ultimoY = window.scrollY;
+    let ultimoY = Agenda.y;
     let alvo = 1;            // para onde a velocidade está indo
     let atual = 1;           // velocidade aplicada agora
     let rodando = false;
@@ -463,9 +473,12 @@
       rodando = false;
     }
 
+    /* `Agenda.y` pelo mesmo motivo da barra de progresso acima — e aqui eram
+       DUAS leituras por quadro, não uma. */
     Agenda.pintar(() => {
-      const delta = window.scrollY - ultimoY;
-      ultimoY = window.scrollY;
+      const y = Agenda.y;
+      const delta = y - ultimoY;
+      ultimoY = y;
 
       if (!visivel) return;
 
@@ -625,9 +638,23 @@
 
     let ultimo = -1;
 
-    function pintar(){
+    /* MEDE NUMA PASSADA, ESCREVE NA OUTRA.
+
+       Este módulo era o último a ler layout dentro da passada de DESENHO: o
+       `getBoundingClientRect` acontecia depois de o trilho do scroll
+       horizontal ter escrito o transform, o `--rp` do quadro anterior ter
+       sujado o estilo e as seis classes de pausa terem sido trocadas. Ler
+       depois de escrever é o que obriga o navegador a resolver o layout ali na
+       hora, e é exatamente o padrão que a Agenda existe para desfazer.
+
+       A conta é a mesma, palavra por palavra — só mudou em que fila cada
+       metade dela roda. O `pendente` é o valor esperando pela hora de ser
+       escrito; -1 quer dizer "nada a fazer neste quadro". */
+    let pendente = -1;
+
+    function medir(){
       const r = fig.getBoundingClientRect();
-      if (r.height <= 0) return;
+      if (r.height <= 0) { pendente = -1; return; }
       const a = Viewport.area();
 
       const percurso = (a.top + a.altura - r.top) / Math.min(r.height, a.altura);
@@ -640,12 +667,21 @@
          reescrever a variável (e com ela recalcular o estilo da imagem)
          quando o scroll não mudou nada de fato. */
       const t = Math.round(p * 1000);
-      if (t === ultimo) return;
-      ultimo = t;
-      fig.style.setProperty('--rp', t / 1000);
+      pendente = (t === ultimo) ? -1 : t;
     }
 
-    Agenda.pintar(pintar);
+    function aplicar(){
+      if (pendente < 0) return;
+      ultimo = pendente;
+      fig.style.setProperty('--rp', pendente / 1000);
+      pendente = -1;
+    }
+
+    // para as chamadas avulsas, que não acontecem dentro de um quadro da Agenda
+    function pintar(){ medir(); aplicar(); }
+
+    Agenda.scroll(medir);      // mede
+    Agenda.pintar(aplicar);    // escreve, depois de todo mundo ter medido
     Agenda.resize(pintar);
     window.addEventListener('load', pintar, { once: true });
     if (document.fonts) document.fonts.ready.then(pintar);

@@ -37,9 +37,53 @@ const Agenda = (() => {
   const noLer = [];
   const noPintar = [];
   const noResize = [];
-  let agendado = false;
-  let resizeAgendado = false;
+  /* O HANDLE DO rAF, E NÃO UM BOOLEANO.
+
+     Aqui havia `agendado = true` antes do requestAnimationFrame e
+     `agendado = false` DENTRO do callback. Parece a mesma coisa e não é: se o
+     callback nunca chega a rodar — aba em segundo plano, janela escondida, o
+     Safari do iPhone suspendendo o rAF no meio de um gesto —, a trava fica
+     ligada para sempre e o site inteiro PARA de responder ao scroll pelo resto
+     da visita. Não trava um efeito: trava todos, porque esta é a única agenda.
+
+     Foi exatamente o que se viu medindo esta página: carregada com a aba ao
+     fundo, o `resizeAgendado` ficou preso em `true`, nenhum resize voltou a
+     ser processado e o `#hsOuter` ficou com `height: 0px` — a seção do scroll
+     horizontal simplesmente não existia, e não havia gesto capaz de consertar.
+
+     Guardando o handle dá pra CANCELAR e repedir. E o `visibilitychange`
+     abaixo é a rede: ao voltar pra frente, qualquer quadro que tenha ficado
+     pendurado é descartado e um novo é pedido. */
+  let idQuadro = 0;
+  let idResize = 0;
   let resizeTimer = 0;
+
+  /* A JANELA É LIDA UMA VEZ POR QUADRO.
+
+     `window.scrollY` NÃO é uma variável: o navegador precisa de layout limpo
+     pra responder, e por isso ele força o recálculo se algo sujou a página.
+     Medido nesta página, com layout sujo: 0,40ms por leitura. A barra de
+     progresso lia uma vez, o marquee lia duas, e as três leituras aconteciam
+     na passada de DESENHO — ou seja, depois de o trilho, o retrato e as
+     classes de pausa já terem escrito. Era o "forced synchronous layout" que
+     esta agenda existe justamente para evitar, três vezes por quadro.
+
+     Agora a leitura acontece uma vez só, no começo da passada de medida, que é
+     onde o layout é recalculado de qualquer jeito. Todo mundo consome o mesmo
+     número — e, de quebra, todos os módulos passam a ver exatamente a mesma
+     posição no mesmo quadro.
+
+     Fora de um quadro (chamadas avulsas no `load`, no `fonts.ready`, na
+     inicialização) o valor volta a ser lido na hora: ali não há passada
+     nenhuma para se apoiar. */
+  let dentroDoQuadro = false;
+  let jY = 0, jW = 0, jH = 0;
+
+  function medirJanela(){
+    jY = window.scrollY;
+    jW = window.innerWidth;
+    jH = window.innerHeight;
+  }
 
   let precisaCompactar = false;
 
@@ -62,30 +106,63 @@ const Agenda = (() => {
     if (precisaCompactar) compactar();
   }
 
+  /* O `finally` não é zelo à toa: `dentroDoQuadro` preso em `true` faria o
+     `Agenda.y` devolver a posição de um quadro antigo pelo resto da visita, e
+     todo efeito ligado ao scroll passaria a desenhar no lugar errado. */
   function quadro(){
-    agendado = false;
-    rodar(noLer);
-    rodar(noPintar);
+    idQuadro = 0;
+    dentroDoQuadro = true;
+    try {
+      medirJanela();
+      rodar(noLer);
+      rodar(noPintar);
+    } finally {
+      dentroDoQuadro = false;
+    }
   }
 
   function pedirQuadro(){
-    if (agendado) return;
-    agendado = true;
-    requestAnimationFrame(quadro);
+    if (idQuadro) return;
+    idQuadro = requestAnimationFrame(quadro);
   }
 
-  function quadroResize(){ resizeAgendado = false; rodar(noResize); }
+  function quadroResize(){
+    idResize = 0;
+    dentroDoQuadro = true;
+    try {
+      medirJanela();
+      rodar(noResize);
+    } finally {
+      dentroDoQuadro = false;
+    }
+  }
+
+  function pedirResize(){
+    if (idResize) return;
+    idResize = requestAnimationFrame(quadroResize);
+  }
 
   window.addEventListener('scroll', pedirQuadro, { passive: true });
 
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-      if (resizeAgendado) return;
-      resizeAgendado = true;
-      requestAnimationFrame(quadroResize);
-    }, 60);
+    resizeTimer = setTimeout(pedirResize, 60);
   }, { passive: true });
+
+  /* A REDE DE SEGURANÇA DA TRAVA (ver o comentário do `idQuadro`).
+
+     Ao voltar pra frente, um quadro pedido enquanto a aba estava escondida
+     pode nunca ter rodado. Cancelar o handle pendurado devolve a agenda ao
+     estado limpo; pedir um quadro e um resize logo em seguida recoloca o site
+     em dia, porque enquanto a aba esteve fora a janela pode ter mudado de
+     tamanho sem que ninguém processasse o evento. */
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (idQuadro) { cancelAnimationFrame(idQuadro); idQuadro = 0; }
+    if (idResize) { cancelAnimationFrame(idResize); idResize = 0; }
+    pedirQuadro();
+    pedirResize();
+  });
 
   return {
     /* MEDE: pode ler layout, não pode escrever. */
@@ -98,6 +175,14 @@ const Agenda = (() => {
     /* Pede mais um quadro sem que tenha havido scroll — é o que sustenta a
        cauda do lerp do trilho depois que o dedo/roda já parou. */
     pedirQuadro,
+
+    /* A JANELA DESTE QUADRO — ver `medirJanela` acima.
+       `y` no lugar de `window.scrollY`, `w`/`h` no lugar de
+       `window.innerWidth`/`innerHeight`. Dentro de um quadro é a leitura já
+       feita; fora dele, a leitura de agora. */
+    get y(){ return dentroDoQuadro ? jY : window.scrollY; },
+    get w(){ return dentroDoQuadro ? jW : window.innerWidth; },
+    get h(){ return dentroDoQuadro ? jH : window.innerHeight; },
 
     /* Tira uma função das duas listas. Um efeito de ENTRADA só precisa ser
        conferido até acontecer; sem isto ele seguiria sendo chamado — pra não
@@ -708,6 +793,11 @@ const hsPanelCount = hsTrack.querySelectorAll(':scope > .hs-panel').length;
 
 let hsCurrent = 0;
 let hsTarget = 0;
+/* O último `hsCurrent` que chegou a virar pixel na tela. Enquanto ele for
+   igual ao atual não há nada para redesenhar — ver o `hsRender`. `NaN` força
+   a primeira passada, e é também como o resize invalida o que já foi feito
+   (NaN nunca é igual a nada, nem a si mesmo). */
+let hsDesenhado = NaN;
 /* quanto o trilho anda do começo ao fim, em px — é o que transforma a posição
    atual em progresso de 0 a 1 pra linha */
 let hsPercurso = 0;
@@ -1310,16 +1400,50 @@ function medirAlturaDaTelaPresa(){
   return hsAlturaTela;
 }
 
+/* MEDIDA DEGENERADA NÃO VIRA ALTURA — o mesmo cuidado que o `hsLinhaLayout`
+   logo acima já tomava, e que faltava aqui.
+
+   Toda a altura da seção sai de duas medidas: a largura da janela e a altura
+   do trilho. Quando as duas chegam zeradas — aba aberta em segundo plano, o
+   instante do carregamento, um ancestral ainda sem caixa — a conta devolve
+   zero e o `#hsOuter` recebe `height: 0px`. E aí a seção do scroll horizontal
+   deixa de existir: o pin não tem percurso, os painéis nunca andam, a linha
+   nunca é desenhada e a página inteira abaixo sobe 4800px.
+
+   Foi o que se mediu nesta página aberta com a aba ao fundo: `hsAltura` 0,
+   `hsOuter.style.height` "0px". Junto com a trava do agendador (ver o
+   comentário do `idQuadro` na Agenda), o estrago era permanente, porque o
+   resize que consertaria nunca era processado.
+
+   Zero não é uma medida: é a ausência dela. Nada é escrito e uma nova
+   tentativa é agendada. */
+let hsLayoutRetentativa = 0;
+
 function hsLayout(){
   hsLinhaLayout();   // o caminho é remontado junto com o layout do trilho
 
+  const W = window.innerWidth || 0;
   const H = medirAlturaDaTelaPresa();
-  const percurso = (hsPanelCount - 1) * window.innerWidth;
+
+  if (W < 2 || H < 2) {
+    clearTimeout(hsLayoutRetentativa);
+    /* refaz a SEQUÊNCIA inteira, e não só esta função: a geometria do trilho e
+       o alvo do pin saem das mesmas medidas que acabaram de faltar */
+    hsLayoutRetentativa = setTimeout(hsRefazerLayout, 250);
+    return;
+  }
+  clearTimeout(hsLayoutRetentativa);
+
+  const percurso = (hsPanelCount - 1) * W;
   const rolagemHorizontal = percurso / VELOCIDADE_PAINEL;
 
   // + 1 tela de pin padrão + EXTRA_PIN_VH telas de pausa + a própria tela presa
   hsAltura = Math.round(rolagemHorizontal + H * (1 + EXTRA_PIN_VH) + H);
   hsOuter.style.height = hsAltura + 'px';
+
+  /* A altura acabou de mudar, então o percurso e o progresso também mudaram:
+     o próximo quadro tem de desenhar mesmo que o trilho esteja no mesmo px. */
+  hsDesenhado = NaN;
 }
 
 /* Escreve em cada painel marcado com [data-progresso] quanto dele já
@@ -1517,6 +1641,33 @@ function atualizarProgressoPaineis(){
    amortecer o que já é suave só custaria os quadros da cauda. */
 const HS_SUAVIZA = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
+/* O AMORTECIMENTO É POR TEMPO, NÃO POR QUADRO.
+
+   O 0.12 é o valor original e continua valendo: ele é a fração do caminho que
+   o trilho anda A CADA QUADRO DE 60Hz. O problema é que ele era aplicado uma
+   vez por quadro, fosse qual fosse a duração do quadro — e aí a constante de
+   tempo do amortecimento passava a depender do monitor e do humor do aparelho:
+
+     · 60Hz  -> ~130ms de cauda (o que foi calibrado)
+     · 120Hz -> ~65ms: metade da suavização, o pulo da roda volta a aparecer
+     ·  30Hz -> ~260ms: o DOBRO do atraso, e justamente no aparelho que já
+                está sofrendo. É esse laço que faz a rolagem parecer "de
+                gelatina" quando o quadro cai — quanto pior o desempenho,
+                mais lerdo o trilho fica, e mais lerdo ele PARECE.
+
+   `1 - (1 - k)^(dt/16.667)` desfaz isso: em 16,667ms o resultado é exatamente
+   0.12, então a 60Hz não muda um pixel do que já existia; em 8,3ms ele dá
+   0,062 e dois quadros de 120Hz somam o mesmo caminho de um de 60Hz. A cauda
+   passa a durar o mesmo tempo em qualquer tela, que é o que se calibrou.
+
+   O teto de 100ms no dt é para a volta de uma aba em segundo plano: sem ele o
+   primeiro quadro depois da pausa traria um dt gigante, o fator saturaria em 1
+   e o trilho daria um salto seco até o alvo. */
+const HS_SUAVIDADE = 0.12;   // por quadro a 60Hz — o número original
+const HS_QUADRO_60 = 1000 / 60;
+const HS_DT_MAX = 100;
+let hsUltimoT = 0;
+
 /* Escreve o estado do trilho. NÃO lê layout — nem aqui, nem no que ele chama:
    o `atualizarProgressoPaineis` faz aritmética sobre medidas do resize e o
    `hsLinhaDesenhar` só escreve currentTime. É o que permite esta função morar
@@ -1527,23 +1678,52 @@ function hsDesenhar(){
   hsLinhaDesenhar(hsPercurso ? hsCurrent / hsPercurso : 0);
 }
 
+/* Desenha só se o trilho de fato saiu do lugar desde a última vez.
+
+   O `hsRender` mora na passada de desenho da Agenda, então ele roda em TODO
+   quadro de rolagem da página — inclusive nos 3200px de hero, projetos, stack
+   e contato, onde o trilho está parado no mesmo pixel há muito tempo. E ele
+   redesenhava assim mesmo: reescrevia o transform, varria os painéis e
+   recalculava a posição da ponta da linha para chegar, toda vez, exatamente no
+   estado em que já estava. Uma comparação de dois números apaga esse trabalho
+   inteiro fora da seção. */
+function hsAplicar(){
+  if (hsCurrent === hsDesenhado) return;
+  hsDesenhado = hsCurrent;
+  hsDesenhar();
+}
+
 function hsRender(){
   if (!HS_SUAVIZA) {
     hsCurrent = hsTarget;
-    hsDesenhar();
+    hsAplicar();
     return;
   }
 
-  hsCurrent += (hsTarget - hsCurrent) * 0.12;
+  /* já assentado: nada de lerp, nada de desenho, nada de pedir outro quadro.
+     O relógio zera para que o próximo movimento comece com um dt limpo. */
+  if (hsCurrent === hsTarget) {
+    hsUltimoT = 0;
+    hsAplicar();
+    return;
+  }
+
+  const agora = performance.now();
+  const dt = hsUltimoT ? Math.min(agora - hsUltimoT, HS_DT_MAX) : HS_QUADRO_60;
+  hsUltimoT = agora;
+
+  // ver HS_SUAVIDADE: a 60Hz este fator é o 0.12 de sempre
+  hsCurrent += (hsTarget - hsCurrent) *
+               (1 - Math.pow(1 - HS_SUAVIDADE, dt / HS_QUADRO_60));
 
   if (Math.abs(hsTarget - hsCurrent) > 0.5) {
-    hsDesenhar();
+    hsAplicar();
     /* o dedo/roda já parou mas o lerp ainda tem caminho: pede o próximo quadro
        pela Agenda, para continuar dentro do mesmo ciclo de todo mundo */
     Agenda.pedirQuadro();
   } else {
     hsCurrent = hsTarget;
-    hsDesenhar();
+    hsAplicar();
   }
 }
 
@@ -1571,10 +1751,18 @@ function hsUpdate(){
   hsTarget = progress * hsPercurso;
 }
 
-hsLayout();
-medirGeometriaDoTrilho();
-hsUpdate();
-atualizarProgressoPaineis();
+/* Tudo o que depende de uma medida da janela, na ordem: a altura da seção
+   (que é o percurso do pin), a geometria do trilho e o alvo. É a mesma
+   sequência do resize e da retentativa do `hsLayout` — um lugar só, para as
+   três não poderem sair de sincronia. */
+function hsRefazerLayout(){
+  hsLayout();
+  medirGeometriaDoTrilho();
+  hsUpdate();
+  atualizarProgressoPaineis();
+}
+
+hsRefazerLayout();
 
 /* O .hs-sticky não rola mais sozinho em largura nenhuma — quem move os
    painéis é sempre o pin, comandado pelo scroll da janela. O ouvinte de
@@ -1591,12 +1779,16 @@ Agenda.pintar(hsRender);      // desenha, depois de todas as medidas
 
    As duas medidas do trilho são refeitas no resize, que é a única coisa capaz
    de mudá-las. */
-Agenda.resize(() => {
-  hsLayout();
-  medirGeometriaDoTrilho();
-  hsUpdate();
-  atualizarProgressoPaineis();
-});
+Agenda.resize(hsRefazerLayout);
+
+/* A restauração de posição do navegador (F5 no meio da página) acontece depois
+   do script e nem sempre vem acompanhada de um evento de scroll. Sem um quadro
+   aqui, o trilho ficaria no zero com a página já dentro da seção — os painéis
+   parados no primeiro e a linha por desenhar, até o primeiro gesto. */
+window.addEventListener('load', () => {
+  hsRefazerLayout();
+  Agenda.pedirQuadro();
+}, { once: true });
 
 
 
@@ -2041,8 +2233,10 @@ Agenda.resize(() => {
     agendado = false;
     if (!bioMedido) medirGeometriaBio();
 
-    const h = window.innerHeight || 1;
-    const y = window.scrollY || window.pageYOffset || 0;
+    /* pela Agenda: `scrollY` obriga o navegador a ter layout limpo pra
+       responder, e este quadro já pagou essa leitura uma vez */
+    const h = Agenda.h || 1;
+    const y = Agenda.y || 0;
 
     // posições de scroll (em coordenadas do documento) onde o efeito começa e
     // onde ele deveria terminar: topo do parágrafo a 88% e a 38% da tela
