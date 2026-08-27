@@ -362,12 +362,24 @@ body{
    trilho fica grudado no dedo por construção, e o JavaScript deixa de
    participar do movimento.
 
-   COMO A FAIXA É DEFINIDA
-   `contain` é a faixa em que o `.hs-outer` cobre a tela inteira: 0% quando o
-   topo dele encosta no topo da tela, 100% quando a base dele encosta na base.
-   O percurso horizontal termina antes disso, porque o fim da seção é uma
-   pausa com o último painel parado — daí o `--hs-fim`, que o js/script.js
-   escreve a cada layout com a mesma conta que o caminho de JavaScript usa.
+   A FAIXA É MEDIDA EM PIXELS DE ROLAGEM, E ISSO NÃO É DETALHE.
+
+   A primeira versão disto usava `view-timeline` com faixa `contain`, que é
+   definida em relação à ALTURA DA TELA. No iPhone a barra de endereço encolhe
+   e cresce o tempo todo enquanto se rola, e cada vez que ela mexe a tela muda
+   de altura — então a faixa `contain` mudava de tamanho no meio do gesto e o
+   trilho pulava para outra posição. Era o "teletransporte".
+
+   `scroll(root block)` com a faixa em PIXELS resolve na raiz: `--hs-inicio` e
+   `--hs-parada` são posições de rolagem em coordenadas do documento, escritas
+   pelo js/script.js a cada layout. Elas não dependem da altura da tela, então
+   a barra do navegador pode ir e voltar à vontade — a mesma posição de
+   rolagem dá sempre o mesmo ponto do percurso.
+
+   As duas âncoras acima do trilho também são estáveis de propósito: o hero é
+   `100svh`, e `svh` é a MENOR altura possível da tela, um número que não muda
+   quando a barra recolhe. Se ele fosse `dvh`, o topo da seção andaria e o
+   pulo voltaria por outro caminho.
 
    POR QUE SÓ NO TOQUE
    No desktop o trilho é amortecido por lerp (ver HS_SUAVIDADE no
@@ -388,11 +400,6 @@ body{
 
 @supports (animation-timeline: view()){
   @media (hover: none), (pointer: coarse){
-    .hs-outer{
-      view-timeline-name: --hs-pin;
-      view-timeline-axis: block;
-    }
-
     /* As longhands são de propósito: o atalho `animation` REINICIA
        `animation-timeline` e `animation-range` para o valor inicial, e as duas
        linhas abaixo seriam apagadas por ele dependendo da ordem. */
@@ -401,8 +408,8 @@ body{
       animation-duration: auto;
       animation-timing-function: linear;
       animation-fill-mode: both;
-      animation-timeline: --hs-pin;
-      animation-range: contain 0% contain var(--hs-fim, 100%);
+      animation-timeline: scroll(root block);
+      animation-range: var(--hs-inicio, 0px) var(--hs-parada, 100%);
     }
   }
 }
@@ -2907,14 +2914,16 @@ body{
    `translateY`. Cobrir com uma cor sólida idêntica ao fundo e recortar dão o
    mesmo pixel; a diferença é que `translateY` o compositor faz sem repintar.
 
-   OS DOIS TRANSLATES SÃO PROPOSITAIS. O de baixo é o deslocamento da própria
-   cortina (0 a 100% da altura da foto: é ele que revela). O de cima é o mesmo
-   empurrão de 34px que a imagem leva — sem ele a linha da cortina descolaria
-   da foto no meio do percurso, porque a foto se move e a cortina não. Os dois
-   são translações, então somam. */
+   A FOTO NÃO SE MOVE MAIS. Aqui havia também um `translateY` de 34px na
+   imagem, o "empurrãozinho para o movimento ter peso". Ele acompanhava a
+   rolagem, e no celular o que se via era a foto subindo e descendo junto com
+   o dedo em vez de ficar parada sendo revelada. Saiu, e a cortina perdeu junto
+   o translate gêmeo que existia só para acompanhá-lo.
+
+   O que restou é o gesto que a pessoa realmente vê: a janela abrindo de cima
+   para baixo, com a foto quieta no lugar. */
 .bio-retrato.retrato-scrub img{
   opacity: var(--rp, 1);
-  transform: translateY(calc((var(--rp, 1) - 1) * 34px));
 }
 
 .bio-retrato.retrato-scrub::after{
@@ -2926,8 +2935,7 @@ body{
   top: 0;
   height: 100%;
   background: var(--bg);
-  transform: translateY(calc((var(--rp, 1) - 1) * 34px))
-             translateY(calc(var(--rp, 1) * 100%));
+  transform: translateY(calc(var(--rp, 1) * 100%));
   pointer-events: none;
 }
 

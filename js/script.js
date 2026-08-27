@@ -866,10 +866,27 @@ let hsDesenhado = NaN;
    pela animação do CSS. */
 let hsPercurso = 0;
 
-/* Onde, dentro da faixa `contain` do `.hs-outer`, o percurso horizontal
-   termina — o resto da faixa é a pausa com o último painel parado. Também sai
-   do layout, e é o mesmo número que vira `--hs-fim`. */
-let hsFimFracao = 1;
+/* AS DUAS ÂNCORAS DO PERCURSO, EM POSIÇÃO DE ROLAGEM DO DOCUMENTO.
+
+   `hsInicioDoc` é o scrollY em que o topo da seção encosta no topo da tela;
+   `hsParadaDoc` é onde o trilho termina de andar e começa a pausa com o último
+   painel parado. Entre os dois, o progresso vai de 0 a 1.
+
+   São POSIÇÕES DE ROLAGEM, e não alturas de tela, e é justamente esse o
+   ponto: no iPhone a barra de endereço muda a altura da tela no meio do gesto,
+   e qualquer conta que dependesse dela mudaria de resultado no meio do
+   caminho. Estes dois números só mudam quando o layout muda.
+
+   Os mesmos dois vão para o CSS como `--hs-inicio` e `--hs-parada`, que é o
+   que faz a animação do compositor e a conta daqui chegarem sempre ao mesmo
+   ponto. */
+let hsInicioDoc = 0;
+let hsParadaDoc = 1;
+
+/* A seção está à vista? Posto por um IntersectionObserver mais abaixo
+   (`hsPromoverTrilho`). Serve para duas coisas: a camada de GPU do trilho e o
+   ritmo de atualização do conteúdo — ver `hsBombear`. */
+let hsVisivel = false;
 
 const EXTRA_PIN_VH = 0.2; // nº de telas extras de pausa antes do .stack começar a subir — ajuste aqui
 
@@ -1577,25 +1594,31 @@ function hsLayout(){
   hsAltura = Math.round(rolagemHorizontal + H * (1 + EXTRA_PIN_VH) + H);
   hsOuter.style.height = hsAltura + 'px';
 
-  /* OS DOIS NÚMEROS QUE A ANIMAÇÃO DO CSS PRECISA (ver o bloco
+  /* OS TRÊS NÚMEROS QUE A ANIMAÇÃO DO CSS PRECISA (ver o bloco
      `animation-timeline` no css/estilo.css).
 
        --hs-percurso  quanto o trilho anda de ponta a ponta, em px;
-       --hs-fim       em que ponto da faixa `contain` esse percurso termina.
+       --hs-inicio    a posição de rolagem em que ele começa a andar;
+       --hs-parada    a posição em que ele termina e a pausa começa.
 
-     A faixa `contain` inteira vale `hsAltura - altura da tela`; o percurso
-     horizontal ocupa só `rolagemHorizontal` dela, e o resto é a pausa com o
-     último painel parado. A divisão entre os dois é o `--hs-fim`.
+     Os dois últimos são POSIÇÕES DE ROLAGEM em coordenadas do documento, e
+     não frações da tela — é isso que deixa a animação imune à barra de
+     endereço do celular, que muda a altura da tela no meio do gesto.
 
-     Escrito em TODO layout, e não só quando o CSS está no comando: custa duas
-     escritas por resize e evita que a variável fique velha se o aparelho
+     Escritos em TODO layout, e não só quando o CSS está no comando: custa três
+     escritas por resize e evita que as variáveis fiquem velhas se o aparelho
      mudar de categoria (girar um tablet, plugar um mouse). */
-  const alcanceContain = Math.max(hsAltura - H, 1);
-  hsFimFracao = Math.min(1, rolagemHorizontal / alcanceContain);
   hsPercurso = percurso;
 
+  /* `rect.top + scrollY` é a posição do topo da seção em coordenadas do
+     DOCUMENTO. Fora de um quadro da Agenda o `Agenda.y` lê na hora, que é o
+     que se quer aqui — esta função roda no layout, não no scroll. */
+  hsInicioDoc = Math.round(hsOuter.getBoundingClientRect().top + Agenda.y);
+  hsParadaDoc = hsInicioDoc + Math.max(rolagemHorizontal, 1);
+
   hsTrack.style.setProperty('--hs-percurso', percurso.toFixed(2) + 'px');
-  hsTrack.style.setProperty('--hs-fim', (hsFimFracao * 100).toFixed(4) + '%');
+  hsTrack.style.setProperty('--hs-inicio', hsInicioDoc + 'px');
+  hsTrack.style.setProperty('--hs-parada', hsParadaDoc + 'px');
 
   /* A altura acabou de mudar, então o percurso e o progresso também mudaram:
      o próximo quadro tem de desenhar mesmo que o trilho esteja no mesmo px. */
@@ -1868,10 +1891,62 @@ function hsAplicar(){
   hsDesenhar();
 }
 
+/* O RITMO DO CONTEÚDO NÃO PODE SER O RITMO DOS EVENTOS DE SCROLL.
+
+   Esta é a outra metade do conserto do celular, e sem ela o primeiro conserto
+   fica pela metade — foi exatamente o que se viu: o trilho liso e o que está
+   dentro dele engasgando.
+
+   O trilho agora é movido pelo compositor, que entrega 60 ou 120 quadros por
+   segundo. Mas a linha desenhada e o jardim dos painéis continuam sendo
+   posicionados aqui, e este código só acordava quando chegava um EVENTO de
+   scroll. Durante o arremesso de um dedo o iOS entrega esses eventos aos
+   punhados — algo como 20 por segundo, e em rajadas. Resultado: o painel
+   deslizando a 120Hz com o conteúdo dele atualizando a 20Hz. Não é queda de
+   FPS, mas é indistinguível de uma.
+
+   `window.scrollY`, por outro lado, está sempre em dia: quem o atualiza é o
+   compositor, evento ou não. Basta pedir quadros por conta própria enquanto a
+   seção estiver à vista e ler a posição em cada um deles — o conteúdo passa a
+   andar no mesmo ritmo do trilho.
+
+   O contador de parada existe para isto não virar um laço eterno: com a
+   página quieta, doze quadros sem mudança (uns 200ms) e a bomba desliga
+   sozinha. O próximo evento de scroll religa. Ou seja, ela roda enquanto há
+   movimento e some quando não há.
+
+   Vale para TODO celular, e não só para os que têm `animation-timeline`. Onde
+   o CSS não assume, quem move o trilho é este mesmo código — e aí ele sofre
+   duas vezes com o ritmo dos eventos: no trilho e no conteúdo. A bomba é o
+   que ele tem. Por isso a única condição aqui é a seção estar à vista: quem
+   decide que isto é um aparelho de toque é o caminho que chama a função, que
+   só existe no ramo sem amortecimento.
+
+   No desktop ela nunca é chamada: lá o evento de scroll já chega uma vez por
+   quadro, e quem sustenta a cauda do lerp é o `Agenda.pedirQuadro` do próprio
+   lerp. */
+const HS_PARADA_MAX = 12;
+let hsQuadrosParados = 0;
+let hsYAnterior = -1;
+
+function hsBombear(){
+  if (!hsVisivel) return;
+
+  const y = Agenda.y;
+  if (y !== hsYAnterior) {
+    hsYAnterior = y;
+    hsQuadrosParados = 0;
+  } else if (++hsQuadrosParados >= HS_PARADA_MAX) {
+    return;
+  }
+  Agenda.pedirQuadro();
+}
+
 function hsRender(){
   if (!HS_SUAVIZA) {
     hsCurrent = hsTarget;
     hsAplicar();
+    hsBombear();
     return;
   }
 
@@ -1903,27 +1978,27 @@ function hsRender(){
 }
 
 function hsUpdate(){
-  const rect = hsOuter.getBoundingClientRect();
-
-  /* COM O CSS NO COMANDO, A CONTA TEM DE SER A DO NAVEGADOR.
+  /* COM O CSS NO COMANDO, A CONTA É EXATAMENTE A MESMA DA ANIMAÇÃO.
 
      A linha desenhada e o jardim dos painéis continuam sendo posicionados
-     aqui, e eles precisam concordar com onde o trilho de fato está. A faixa
-     `contain` do navegador é medida contra a tela REAL — que no celular muda
-     de altura quando a barra de endereço aparece e some —, enquanto o caminho
-     de JavaScript usa a altura presa do trilho (`100svh`, que não muda, de
-     propósito). Usar a régua errada aqui deixaria a ponta do lápis alguns por
-     cento adiante ou atrás do painel.
+     aqui, e eles precisam concordar com onde o trilho de fato está — se as
+     duas contas divergirem em um por cento que seja, a ponta do lápis descola
+     do painel e o efeito se desmancha.
 
-     Mesma fração dos dois lados, mesma tela dos dois lados: a ponta fica onde
-     o painel está. */
+     Por isso a conta usa as MESMAS duas âncoras que foram para o CSS, e nada
+     mais: nem altura de tela, nem altura da seção. Duas posições de rolagem e
+     uma regra de três. */
   if (HS_CSS_MOVE) {
-    const alcance = Math.max(hsAltura - Agenda.h, 1);
-    const fim = Math.max(alcance * hsFimFracao, 1);
-    const p = Math.min(Math.max(-rect.top / fim, 0), 1);
+    const p = Math.min(Math.max(
+      (Agenda.y - hsInicioDoc) / (hsParadaDoc - hsInicioDoc), 0), 1);
     hsTarget = p * hsPercurso;
     return;
   }
+
+  /* Só o caminho de JavaScript precisa do rect — e ele fica DEPOIS da saída
+     acima de propósito: no celular esta função roda em todo quadro, e uma
+     leitura de layout que ninguém usa é uma leitura a menos que se pode ter. */
+  const rect = hsOuter.getBoundingClientRect();
 
   // hsAltura no lugar de hsOuter.offsetHeight: mesmo número, sem leitura de layout
   /* `hsAlturaTela`, e não `window.innerHeight`, PELO MESMO MOTIVO do hsLayout
@@ -1978,10 +2053,18 @@ Agenda.pintar(hsRender);      // desenha, depois de todas as medidas
    esteja olhando. Sem observer (navegador antigo), a classe entra de vez e o
    comportamento volta a ser o de antes — nada quebra. */
 (function hsPromoverTrilho(){
-  if (!('IntersectionObserver' in window)) { hsOuter.classList.add('hs-perto'); return; }
+  if (!('IntersectionObserver' in window)) {
+    hsOuter.classList.add('hs-perto');
+    hsVisivel = true;
+    return;
+  }
 
   new IntersectionObserver((entradas) => {
-    hsOuter.classList.toggle('hs-perto', entradas[0].isIntersecting);
+    const perto = entradas[0].isIntersecting;
+    hsOuter.classList.toggle('hs-perto', perto);
+    hsVisivel = perto;
+    /* ao entrar, dá o primeiro empurrão: a bomba se sustenta a partir daí */
+    if (perto) Agenda.pedirQuadro();
   }, { rootMargin: '100% 0px' }).observe(hsOuter);
 })();
 
