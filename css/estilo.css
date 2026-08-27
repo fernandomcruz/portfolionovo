@@ -299,21 +299,36 @@ body{
    LINHA DESENHADA PELO SCROLL
 
    Um traço só, atravessando os cinco painéis de ponta a ponta, que vai sendo
-   desenhado conforme os painéis passam. Ele não é reto: em cada painel faz o
-   gesto daquele painel — sobe e dá uma volta no "I DESIGN", vira degraus de
-   código no "I DEVELOP", quica como bola no "I ANIMATE" e fecha numa espiral
-   no "SHOW YOU". O caminho é montado no js/script.js a partir da medida real
-   do painel, então ele acompanha qualquer tela.
+   desenhado conforme eles passam. O SVG é montado inteiro pelo js/script.js e
+   entra como primeiro filho do .hs-track; o caminho, o gesto de cada painel e
+   o porquê de cada decisão estão no cabeçalho de lá.
 
-   Ele mora ATRÁS do texto (z-index 0, contra o 1 do .texto e o 2 do jardim).
-   Quando o traço cruza uma palavra, passa por trás dela — é o que faz parecer
-   que a linha costura o conteúdo em vez de riscar por cima.
+   O QUE ESTAVA ERRADO AQUI — e não era a cor:
 
-   Sobre custo: desenhar é animar `stroke-dashoffset`, que repinta o traço.
-   Por isso aqui não há filtro, sombra nem gradiente — só uma linha fina, que
-   é a coisa mais barata de rasterizar. E quem move o ponteiro é a Web
-   Animations API, não uma variável de CSS: mesma lição da bio, onde trocar
-   uma coisa pela outra derrubou o custo em 96%.
+   O SVG é `position: absolute`, e elemento posicionado pinta DEPOIS do
+   conteúdo em fluxo dos irmãos — mesmo com z-index menor, mesmo vindo antes
+   no DOM. Só dois dos cinco painéis tinham o `.texto` posicionado, então a
+   linha passava atrás da palavra nesses dois e POR CIMA das letras nos outros
+   três: um traço largo cortando "DEVELOPER", "I ANIMATE." e "SHOW YOU".
+   A correção está no `.hs-panel` aqui embaixo: o painel inteiro sobe pro
+   z-index 1 e a linha fica no 0. Assim qualquer coisa que entre num painel já
+   nasce na frente dela, sem precisar lembrar de posicionar nada.
+
+   SOBRE A COR, que é `--lightgreen` (#d9ff00) sobre o `--white` (#f1ece1)
+   desta seção: são 1,02:1 de contraste. Isso é DE PROPÓSITO e só funciona
+   agora que o empilhamento está certo — o traço não é para ser lido como
+   linha, é uma faixa tonal larga passando por trás das palavras, que aparece
+   pelo movimento (ela se desenha) e pela diferença de matiz, não pela
+   luminância. Por isso ela também é larga: em 6px seria só sujeira; em 30px é
+   uma massa de cor. Quem depende de contraste não perde informação nenhuma —
+   o SVG é `aria-hidden` e não carrega conteúdo.
+   Se um dia isso tiver que virar linha legível de fato, é `--linha-cor` logo
+   abaixo, e aí a espessura precisa cair junto (LINHA.espessuraDivisor, no
+   js/script.js).
+
+   Custo: desenhar é animar `stroke-dashoffset`, que repinta o traço. Por isso
+   aqui não há filtro, sombra nem gradiente — só o traço, que é a coisa mais
+   barata de rasterizar.
    ========================================================================= */
 
 .hs-linha{
@@ -324,26 +339,28 @@ body{
   height: 100%;
   pointer-events: none;
   overflow: visible;
-}
 
-/* A opacidade mora no <svg>, não no path: as fatias têm as pontas
-   arredondadas sobrepostas nas emendas, e com alfa por path o valor comporia
-   duas vezes ali — um ponto mais escuro em cada junta. No <svg> elas compõem
-   entre si em alfa cheio e a opacidade vale para o conjunto. */
-.hs-linha{
-  opacity: var(--opacidade, .85);
+  /* os dois knobs do traço. O `--linha-traco` é reescrito pelo script a cada
+     layout (largura da tela / 34, entre 10 e 30px); o valor aqui é só o que
+     vale antes da primeira medida. */
+  --linha-cor: var(--lightgreen);
+  --linha-traco: 3px;
+
+  /* A opacidade mora no <svg>, não no path: o traço é fatiado em vários
+     <path> e as pontas arredondadas se sobrepõem nas emendas — com alfa por
+     path o valor comporia duas vezes ali, um ponto mais escuro em cada junta.
+     No <svg> as fatias compõem entre si em alfa cheio e a opacidade vale pro
+     conjunto. */
+  opacity: .85;
 }
 
 .hs-linha path{
   fill: none;
-  stroke: var(--lightgreen);
-  stroke-width: var(--traco, 3px);
+  stroke: var(--linha-cor);
+  stroke-width: var(--linha-traco);
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-
-/* o desenho só é escondido depois que o JS assumiu o controle do ponteiro —
-   sem script, a linha nasce inteira e visível */
 
 
 .hs-panel{
@@ -354,6 +371,49 @@ body{
   margin: 0;
   font-family: 'JetBrains Mono', monospace;
   overflow: hidden;
+
+  /* O PAINEL INTEIRO NA FRENTE DA LINHA.
+     Ver o bloco "LINHA DESENHADA PELO SCROLL" acima: o SVG é posicionado e,
+     por isso, pintava por cima do conteúdo em fluxo dos painéis mesmo estando
+     no z-index 0. Antes só o `.texto` do "I DESIGN." e o do "I DEVELOP."
+     escapavam, porque só esses dois eram posicionados — nos outros três a
+     linha atravessava as letras por cima.
+     Resolver painel por painel dava três regras pra lembrar toda vez que um
+     painel novo entrasse. Aqui é uma: o painel sobe pro 1, a linha fica no 0,
+     e o que estiver dentro do painel já nasce na frente dela. Os z-index de
+     dentro (o .texto no 1, o jardim no 2) continuam valendo entre si — só
+     passam a ser contados dentro do painel. */
+  position: relative;
+  z-index: 1;
+}
+
+/* AS EXCEÇÕES: painéis que ficam ATRÁS da linha.
+
+   O padrão é o traço costurar o conteúdo por trás. Nestes dois o gesto é o
+   contrário, e por motivos diferentes:
+
+     · "I DEVELOP." — a linha passa por cima da palavra enquanto ela se monta.
+       O painel já é sobre coisa sendo construída em cima de coisa; o traço
+       cruzando na frente entra como mais uma camada da montagem.
+     · "Now, LET ME SHOW YOU" — o fecho. A linha chega na frente da frase,
+       como quem sublinha o que acabou de dizer e sai de cena por cima.
+
+   Como funciona: o painel desce pro mesmo z-index da linha (0), e aí quem
+   pinta por cima é quem vem depois no DOM. O js/script.js monta o SVG como
+   ÚLTIMO filho do .hs-track exatamente por isso. Os outros três painéis
+   continuam no 1 e seguem por cima do traço.
+
+   Um detalhe que faz isso ser barato: z-index 0 num elemento posicionado ainda
+   cria contexto de empilhamento, então o `.texto` (z-index 1) e o jardim
+   (z-index 2) continuam valendo ENTRE SI, dentro do painel. O painel inteiro
+   passa por baixo da linha como um bloco só — nada aqui precisa saber o que
+   tem dentro dele.
+
+   `.fixado` já existia no HTML do último painel e não era usado por regra
+   alguma; agora é o gancho. */
+.hs-panel.painel-develop,
+.hs-panel.fixado{
+  z-index: 0;
 }
 
 .hs-panel--mid .texto{
@@ -2543,34 +2603,36 @@ body{
   .bio-retrato:hover img{ filter: saturate(1.12) contrast(1.06) brightness(1.05); }
 }
 
-/* A ENTRADA — revela de baixo para cima, acompanhando o scroll
+/* A ENTRADA — revela de cima para baixo, acompanhando o scroll
 
-   O gesto é REVELAR, não deslizar. O clip-path abre uma janela que cresce da
-   base para o topo: `inset(100% 0 0 0)` não mostra nada, e conforme o recorte
-   de cima diminui a área visível sobe a partir da borda de baixo. A foto vai
-   surgindo — primeiro a barra do moletom, depois o tronco, por último o rosto.
-   Os 34px que sobem junto são só para o movimento ter peso; quem faz o efeito
+   O gesto é REVELAR, não deslizar. O clip-path abre uma janela que cresce do
+   topo para a base: `inset(0 0 100% 0)` não mostra nada, e conforme o recorte
+   de baixo diminui a área visível desce a partir da borda de cima. A foto vai
+   surgindo — primeiro o rosto, depois o tronco, por último a barra do moletom.
+   Os 34px que descem junto são só para o movimento ter peso; quem faz o efeito
    é a janela.
+
+   O sentido é o único ajuste em relação à versão anterior, que abria de baixo
+   para cima (`inset(100% 0 0 0)` com `translateY(34px)`). Duração, easing,
+   opacidade e a distância do empurrão continuam iguais — a janela e o
+   deslocamento só trocaram de ponta, para os dois andarem no mesmo sentido.
+
+   Casa bem com a máscara do topo deste arquivo, que apaga a base da imagem: a
+   revelação TERMINA na parte que já é translúcida, em vez de começar nela.
 
    Só esconde sob .retrato-scrub, classe que o JS coloca. Sem script, sem
    classe: a foto aparece normalmente. */
 .bio-retrato.retrato-scrub img{
   opacity: 0;
-  clip-path: inset(100% 0 0 0);
-}
-
-/* A revelação é presa ao scroll: a janela do clip-path sobe da base conforme a
-   foto entra. Só esconde sob .retrato-pronto, classe que o JS põe — sem script,
-   a foto aparece normalmente. */
-.bio-retrato.retrato-scrub img{
+  clip-path: inset(0 0 100% 0);
   animation: retratoRevela 1s linear both paused;
 }
 
 @keyframes retratoRevela{
   from{
     opacity: 0;
-    clip-path: inset(100% 0 0 0);
-    transform: translateY(34px);
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(-34px);
   }
   to{
     opacity: 1;

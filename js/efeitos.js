@@ -593,8 +593,35 @@
     if (!anim) { fig.classList.remove('retrato-scrub'); return; }
 
     const DUR = 1000;              // a régua da animação pausada, em ms
-    const COMECA  = 0.10;          // zona morta: uma nesga de foto não começa nada
-    const TERMINA = 0.90;          // revelada por inteiro com 90% dela dentro
+
+    /* ONDE NA TELA O EFEITO ACONTECE.
+
+       Os dois números são medidos em ALTURAS DE FOTO já percorridas desde a
+       borda de baixo: 0 é a foto encostando nela, 1 é a foto inteira dentro
+       com a base assentada nessa borda, e acima de 1 ela já subiu além disso.
+
+       Estavam em 0.10 e 0.90, e isso prendia o efeito inteiro na faixa de
+       baixo da tela. Medido num monitor de 720px com a foto de 431:
+
+         · começava com 43px de foto à vista — uma nesga na borda inferior;
+         · terminava com a base ainda 43px ABAIXO do fim da tela, ou seja, a
+           revelação fechava sem a foto nunca ter aparecido por completo.
+
+       Toda a graça acontecia no rodapé do campo de visão e, quando a foto
+       enfim assentava no meio da tela, não havia mais nada para ver.
+
+       Com 0.35 e 1.20 o percurso sobe junto com a foto: começa com um terço
+       dela à vista (151px no mesmo monitor) e fecha com ela INTEIRA na tela,
+       ainda com 86px de folga até a borda de baixo. O passar de 1 é o que
+       garante isso — abaixo de 1 é impossível terminar com a foto inteira
+       visível, porque 1 é justamente o instante em que a base alcança a borda.
+
+       Conferi que dá para chegar lá em todas as proporções: o percurso máximo
+       que a página oferece é 2,09 no desktop, 4,02 no celular em pé e 3,74
+       deitado, contra os 1,20 exigidos. Sem folga o efeito congelaria no meio,
+       que é o oposto do que se quer. */
+    const COMECA  = 0.35;          // um terço da foto à vista antes de começar
+    const TERMINA = 1.20;          // fecha com ela inteira dentro, com folga
 
     let ultimo = -1;
 

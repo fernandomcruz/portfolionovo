@@ -21,7 +21,14 @@
       "Bash(sed -n '/^function hsRender/,/^}/p' js/script.js)",
       "Bash(curl -s \"http://localhost:5413/js/script.js\")",
       "Bash(curl -sI \"http://localhost:5413/js/script.js\")",
-      "Bash(echo \"--- exit $? \\(1 = nada dangling\\) ---\")"
+      "Bash(echo \"--- exit $? \\(1 = nada dangling\\) ---\")",
+      "Bash(git checkout *)",
+      "Bash(git hash-object *)",
+      "Bash(git diff *)",
+      "Bash(grep -vE \"^\\\\+\\\\s*\\(/\\\\*|\\\\*|$\\)\")",
+      "Bash(awk '{print \"  \"$6\" \"$7}')",
+      "Bash(awk '{print \"  script.js \"$6}')",
+      "Bash(rm -f servidor.py)"
     ]
   }
 }

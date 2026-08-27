@@ -717,28 +717,59 @@ const EXTRA_PIN_VH = 0.2; // nº de telas extras de pausa antes do .stack começ
 /* =========================================================================
    LINHA DESENHADA PELO SCROLL
 
-   Um traço único atravessando os cinco painéis do scroll horizontal, desenhado
-   conforme eles passam. Três decisões sustentam o resto:
+   Um traço único atravessando os cinco painéis do scroll horizontal, que vai
+   sendo desenhado conforme eles passam.
 
-     · Todo gesto é medido numa unidade só (U) nos dois eixos. Medir x em
-       larguras e y em alturas geraria desenhos diferentes por tela, já que o
-       painel muda de formato (1440x900 no monitor, 390x844 no celular).
-     · A composição é uma lista de PONTOS; a curva sai deles por Catmull-Rom,
-       que garante tangente contínua nas emendas — é o que faz parecer um traço
-       só em vez de trechos costurados.
-     · O ponteiro é `currentTime` da Web Animations API sobre um
-       `stroke-dashoffset` pausado: não passa por recálculo de estilo (0,059ms
-       por quadro) e pega carona no ciclo que já move o trilho, então linha e
-       painéis não têm como sair de sincronia.
+   O QUE ESTAVA QUEBRADO, e não era o desenho: o SVG é `position: absolute`, e
+   elemento posicionado pinta DEPOIS do conteúdo em fluxo dos irmãos — mesmo
+   com z-index menor, mesmo vindo antes no DOM. Como só dois dos cinco painéis
+   tinham `.texto` posicionado (o do "I DESIGN." e o do "I DEVELOP."), a linha
+   passava atrás da palavra nesses dois e POR CIMA das letras nos outros três.
+   A correção não é remendar painel por painel: é levantar o painel inteiro
+   para z-index 1 (a regra está em `.hs-panel`) e deixar a linha no 0. Assim
+   qualquer coisa que entre num painel já nasce na frente dela.
+
+   A COR E A ESPESSURA SÃO AS ORIGINAIS, e agora elas fazem sentido. São
+   1,02:1 de contraste contra o fundo da seção — o traço não é para ser lido
+   como linha, é uma faixa larga de `--lightgreen` passando POR TRÁS das
+   palavras, que aparece pelo movimento e pelo matiz, não pela luminância.
+   Antes ela passava por cima das letras em três painéis, e aí a mesma massa
+   de cor virava um risco. É por isso que a correção de empilhamento vinha
+   primeiro: era ela que estava errada, não a paleta. Ver o cabeçalho do
+   css/estilo.css para os dois knobs.
+
+   O desenho em si se apoia em quatro decisões:
+
+     · A composição é uma lista de PONTOS normalizados — x em larguras de
+       painel (0 a 5), y em frações da altura. Converter para pixel é
+       multiplicar: não há viewBox esticado, escala nem transform.
+     · A curva sai dos pontos por Catmull-Rom, que passa POR todos eles e dá
+       tangente contínua nas emendas — é o que faz parecer um traço só em vez
+       de trechos costurados. As composições atuais são todas redondas; se um
+       dia um ponto precisar virar bico (um degrau, um quique de bola), ele
+       aceita a marca `Q` no terceiro item e a tangente ali passa a seguir a
+       corda. Sem tocar no traçado.
+     · O traço é montado como um <path> POR SEGMENTO. `stroke-dashoffset`
+       invalida a caixa INTEIRA do caminho a cada mudança; em 6400px de
+       percurso isso é a curva toda rasterizada de novo a cada quadro de
+       scroll. Fatiado, só a fatia onde a ponta do lápis está muda de estado —
+       as de trás ficam paradas em 0, as da frente paradas no comprimento
+       delas.
+     · A ponta anda em X, não em comprimento de arco. Os dois não são
+       proporcionais: num trecho íngreme o traço gasta muito comprimento sem
+       avançar quase nada em X. Sem corrigir isso a ponta dispara na frente da
+       janela e, do meio do percurso em diante, você vê a linha pronta em vez
+       de vê-la sendo feita. A tabela de X mais abaixo faz o caminho inverso.
 
    Sem JS o SVG nem chega a existir: a linha é enfeite, não estrutura.
    ========================================================================= */
 
+const LINHA_NS = 'http://www.w3.org/2000/svg';
+
 const LINHA = {
   /* ---- composição ---- */
-  // os dois pontos de adaptação. Poucos de propósito: dentro de cada
-  // categoria a geometria responde sozinha, porque as coordenadas são
-  // frações do painel
+  // os dois pontos de adaptação. Poucos de propósito: dentro de cada categoria
+  // a geometria responde sozinha, porque as coordenadas são frações do painel
   pontoCelular: 768,
   pontoDesktop: 1180,
   // o quanto a composição ocupa da altura do painel. 1 = como foi desenhada;
@@ -746,22 +777,41 @@ const LINHA = {
   amplitude: 1,
 
   /* ---- traço ---- */
-  espessuraMin: 10,
-  espessuraMax: 30,
-  espessuraDivisor: 34,   // largura da tela / isto = espessura desejada
-  opacidade: 0.85,
+  // Espessura e cor são as originais de volta, a pedido. Elas fazem sentido
+  // AGORA porque o empilhamento foi corrigido: um traço largo de --lightgreen
+  // passando POR TRÁS das palavras é uma faixa tonal costurando o conteúdo. O
+  // mesmo traço por cima das letras, que era o estado anterior, era um risco.
+  /* >>> TESTE DE ESPESSURA — voltar para 34 / 10 / 30 quando terminar <<< */
+  espessuraDivisor: 30,   // largura da tela / isto = espessura desejada
+  espessuraMin: 11,
+  espessuraMax: 46,
 
   /* ---- curva ---- */
-  // 0 = quinas; 0.5 = Catmull-Rom clássico; acima disso começa a inchar
-  tensao: 0.5,
+  tensao: 0.5,   // 0 = tudo quina; 0.5 = Catmull-Rom clássico; acima disso incha
+  corda: 0.3,    // o quanto a curva sai reta ao passar por um ponto de quina
 
-  /* ---- entrada e saída ---- */
-  comecaEm: -0.18,   // em larguras de painel, antes da borda esquerda
+  /* ---- entrada e saída ----
+     Onde fica a ponta do lápis, em larguras de painel contadas da BORDA
+     ESQUERDA DA TELA (não do caminho). Ver o comentário do hsLinhaDesenhar.
+       · entradaEm negativo esconde a ponta atrás da borda no instante 0, e o
+         valor tem que cobrir o raio do traço, senão a bolinha da ponta
+         aparece espiando. Em -0.05 sobra folga até a espessura máxima.
+       · saidaEm 1 = borda direita: a última pincelada acontece na saída.
+       · aceleracao controla COMO ela vai de um ao outro. 1 = reta. Acima
+         disso, ela corre nas duas pontas e cruza o meio devagar: descola
+         rápido da borda esquerda no começo, passeia pelo miolo da tela, e só
+         corre pra borda direita no fim. É esse "devagar no meio" que mantém
+         espaço em branco na frente da ponta — sem ele o traço chega no fim de
+         cada trecho antes da tela mostrar aquele trecho. */
+  entradaEm: -0.05,
+  saidaEm: 1,
+  aceleracao: 2,
 
-
-  /* ---- resize ---- */
-  // variação de altura menor que isto não remonta nada: é a barra do
-  // navegador do celular aparecendo e sumindo, não uma tela nova
+  /* ---- medição ---- */
+  amostras: 256,
+  // variação de altura menor que isto não remonta nada: é a barra do navegador
+  // do celular aparecendo e sumindo, não uma tela nova. Remontar ali
+  // reiniciaria o desenho no meio da rolagem — o pulo que a pessoa vê.
   toleranciaDeAltura: 0.18
 };
 
@@ -774,14 +824,22 @@ const LINHA = {
    para o formato do painel dela.
 
    O texto ocupa de 0,34 a 0,66 da altura, sobrando uma faixa livre acima e
-   outra abaixo. A composição usa as duas e atravessa entre elas por trás das
-   palavras (o SVG está em z-index 0, o texto em 1). Alturas entre 0,10 e 0,92,
-   nunca encostando nas bordas.
+   outra abaixo. A composição usa as duas e atravessa entre elas POR TRÁS das
+   palavras. Isso agora é verdade de fato: com o painel no z-index 1 e a linha
+   no 0, a travessia passa atrás das letras em todos os cinco painéis, e não só
+   nos dois que por acaso tinham o `.texto` posicionado.
 
    As três variantes seguem a mesma direção — sobe, plana, mergulha, estica,
    sobe, desce em diagonal — recalibrada para o espaço de cada formato.
    Nenhuma é a outra reduzida.
    ========================================================================= */
+
+/* Marca de quina, lida pelo `linhaSegmentos` no terceiro item do ponto: ali a
+   tangente segue a corda em vez do vizinho, o que dá bico em vez de curva.
+   Nenhum ponto das composições abaixo usa — elas são todas redondas de
+   propósito —, mas fica aqui porque é assim que se pede um degrau ou um
+   quique sem mexer no traçado. */
+const Q = 1;
 
 const COMPOSICOES = {
   /* CELULAR — uma travessia inteira por painel.
@@ -837,103 +895,180 @@ function linhaComposicao(W, H){
   return COMPOSICOES.desktop;
 }
 
+/* As coordenadas já vêm normalizadas: converter é multiplicar. A `amplitude`
+   recolhe o desenho em direção ao meio vertical sem mudar a forma dele, e
+   existe só como ajuste fino: em 1 vale o que foi desenhado. */
+function linhaPontos(W, H){
+  const meio = 0.5;
+  return linhaComposicao(W, H).map(([x, y, quina]) => [
+    x * W,
+    (meio + (y - meio) * LINHA.amplitude) * H,
+    quina
+  ]);
+}
+
 
 /* =========================================================================
    TRAÇADO — pontos viram curva
 
    Catmull-Rom passa POR todos os pontos (diferente de Bézier, onde os pontos
-   de controle ficam fora da curva) e entrega tangente contínua nas emendas.
-   Na prática: eu movo um ponto, a curva inteira se reacomoda sozinha e
-   continua suave. É o que permite editar a composição sem recalcular
-   controles à mão.
+   de controle ficam fora da curva) e entrega tangente contínua nas emendas. Na
+   prática: eu movo um ponto, a curva inteira se reacomoda sozinha e continua
+   suave. É o que permite editar a composição acima sem recalcular controles à
+   mão.
 
-   A conversão para Bézier cúbica é a fórmula padrão; a tensão controla o
-   quanto a curva "abre" nas passagens.
+   A QUINA é a única exceção, e é local: num ponto marcado, o controle daquele
+   lado sai pela CORDA do segmento em vez de pela tangente do vizinho. A outra
+   ponta do mesmo segmento continua curva — por isso o quique tem bico no chão
+   e barriga no ar, com o mesmo par de fórmulas.
    ========================================================================= */
 
-function linhaSegmentos(pontos, tensao){
+function linhaSegmentos(pontos){
   if (pontos.length < 2) return [];
 
-  const n = (i) => pontos[Math.max(0, Math.min(pontos.length - 1, i))];
+  const k = LINHA.tensao / 3;    // (p2-p0)/6 * tensao * 2, simplificado
+  const c = LINHA.corda;
   const f = (v) => v.toFixed(1);
+  const em = (i) => pontos[Math.max(0, Math.min(pontos.length - 1, i))];
   const fora = [];
 
   for (let i = 0; i < pontos.length - 1; i++) {
-    const p0 = n(i - 1), p1 = n(i), p2 = n(i + 1), p3 = n(i + 2);
-    const c1x = p1[0] + (p2[0] - p0[0]) / 6 * tensao * 2;
-    const c1y = p1[1] + (p2[1] - p0[1]) / 6 * tensao * 2;
-    const c2x = p2[0] - (p3[0] - p1[0]) / 6 * tensao * 2;
-    const c2y = p2[1] - (p3[1] - p1[1]) / 6 * tensao * 2;
-    fora.push(`M${f(p1[0])},${f(p1[1])} C${f(c1x)},${f(c1y)} ${f(c2x)},${f(c2y)} ${f(p2[0])},${f(p2[1])}`);
+    const p0 = em(i - 1), p1 = em(i), p2 = em(i + 1), p3 = em(i + 2);
+    const dx = p2[0] - p1[0], dy = p2[1] - p1[1];
+
+    // sair de p1: pela corda se p1 é quina, senão pela tangente de Catmull-Rom
+    const c1x = p1[2] ? p1[0] + dx * c : p1[0] + (p2[0] - p0[0]) * k;
+    const c1y = p1[2] ? p1[1] + dy * c : p1[1] + (p2[1] - p0[1]) * k;
+    // chegar em p2: mesma regra, do outro lado
+    const c2x = p2[2] ? p2[0] - dx * c : p2[0] - (p3[0] - p1[0]) * k;
+    const c2y = p2[2] ? p2[1] - dy * c : p2[1] - (p3[1] - p1[1]) * k;
+
+    fora.push(`M${f(p1[0])},${f(p1[1])}C${f(c1x)},${f(c1y)} ${f(c2x)},${f(c2y)} ${f(p2[0])},${f(p2[1])}`);
   }
   return fora;
-}
-
-function linhaCaminho(pontos, tensao){
-  const segs = linhaSegmentos(pontos, tensao);
-  if (!segs.length) return '';
-  // um caminho só: o primeiro M e depois apenas os C
-  return segs[0] + segs.slice(1).map((d) => d.slice(d.indexOf(' C'))).join('');
 }
 
 
 /* =========================================================================
    MONTAGEM
 
-   O traço é montado como UMA fatia por segmento de curva, e não como um
-   caminho só. O motivo é de pintura, não de geometria.
+   Uma fatia por segmento de curva. O motivo é de pintura, não de geometria —
+   está no cabeçalho lá em cima. Duas coisas que isto exige, e que moram no CSS:
 
-   `stroke-dashoffset` não é uma propriedade que o compositor saiba animar: a
-   cada mudança o navegador invalida a CAIXA INTEIRA do caminho e rasteriza de
-   novo a parte dela que está na tela. Com um traço de 30px de espessura sobre
-   8166px de percurso, isso é ~1,3 megapixel de curva antisserrilhada redesenhada
-   POR QUADRO enquanto se rola — e era o que sobrava de pesado no scroll
-   horizontal depois que o JavaScript já tinha sido reduzido a 0,1ms.
-
-   Fatiado, só a fatia onde a ponta do lápis está muda de dashoffset. As de trás
-   ficam paradas em 0 (desenhadas), as da frente paradas no comprimento delas
-   (invisíveis). A área invalidada cai de o caminho inteiro para um segmento.
-
-   Duas coisas que isto exige:
-     · a opacidade sai do path e vai para o <svg>. Com ela no path, as pontas
-       arredondadas de fatias vizinhas se sobrepõem e o alfa compõe duas vezes,
-       o que apareceria como um ponto mais escuro em cada emenda. No <svg> as
-       fatias compõem entre si em alfa cheio e a opacidade é aplicada ao
-       conjunto — o mesmo resultado de um caminho só.
+     · a opacidade fica no <svg>, não no path. Com ela no path, as pontas
+       arredondadas de fatias vizinhas se sobrepõem e o alfa compõe duas vezes
+       — um ponto mais escuro em cada emenda. No <svg> as fatias compõem entre
+       si em alfa cheio e a opacidade vale pro conjunto.
      · as fatias compartilham exatamente o ponto de emenda e usam
        `stroke-linecap: round`, então as duas meias-luas coincidem e a junta
        fica idêntica a um `stroke-linejoin: round`.
-
-   O caminho-mestre continua no DOM, sem traço, porque é dele que saem
-   `getTotalLength` e `getPointAtLength` para a tabela de X.
    ========================================================================= */
 
-/* Recria as fatias. Cada uma é um cubic só, com o dasharray no comprimento
-   dela; guardamos o comprimento acumulado para saber, no quadro, qual fatia
-   contém a ponta. */
-function hsLinhaFatiar(emPixels){
-  const NS = 'http://www.w3.org/2000/svg';
-  const ds = linhaSegmentos(emPixels, LINHA.tensao);
+const hsLinha = (() => {
+  if (!hsTrack) return null;
+  const svg = document.createElementNS(LINHA_NS, 'svg');
+  svg.setAttribute('class', 'hs-linha');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('preserveAspectRatio', 'none');
+  /* ÚLTIMO filho, e não o primeiro. Os painéis estão no z-index 1 e a linha no
+     0, então entre eles a ordem do DOM não muda nada — mas os painéis que
+     ficam ATRÁS do traço ("I DEVELOP." e "LET ME SHOW YOU") descem pro mesmo
+     z-index 0 da linha, e aí quem vem depois no DOM é quem pinta por cima.
+     É assim que a linha passa na FRENTE dessas duas e por trás das outras
+     três, sem um segundo SVG e sem recortar nada. As exceções são declaradas
+     no css/estilo.css, junto com o `.hs-panel`. */
+  hsTrack.appendChild(svg);
+  return {
+    svg,
+    fatias: [], ativa: -1, comprimento: 0,
+    tabelaX: null,
+    larguraMedida: 0, alturaMedida: 0,
+    prog: 0, pronta: false
+  };
+})();
 
+/* O DASHARRAY TEM FOLGA — e é isto que mata o ponto amarelo.
+
+   O jeito óbvio de esconder uma fatia é `dasharray: comp` com
+   `dashoffset: comp`. Só que o valor vai pro estilo como texto, e ele era
+   escrito com `comp.toFixed(1)`: um comprimento de 579,94 virava 579,9. O
+   traço passa a valer 579,9 e o caminho tem 579,94 — sobram 0,04px de traço
+   LIGADO no fim da fatia. Com `stroke-linecap: round`, 0,04px de traço não
+   desenham um risquinho de 0,04px: desenham o CÍRCULO da ponta inteira, ou
+   seja, uma bolinha do diâmetro do traço (30px no desktop).
+   Medido nesta composição: 9 das 16 fatias vazavam. Quase todas caíam por
+   trás das letras e não davam na vista; a da fatia 0 caía no vazio embaixo do
+   "DEVELOPER" e virava aquele ponto amarelo. E sumia ao rolar porque, quando
+   a ponta do lápis passa pela fatia, ela vira traço desenhado de verdade.
+
+   A correção não é arredondar melhor — é dar FOLGA. O período do tracejado
+   passa a ser `ceil(comp) + 1`, sempre maior que o caminho:
+
+     · escondida  -> offset = D. A fatia inteira (0..comp) cai dentro da banda
+       apagada [D, 2D), com pelo menos 1px de margem. Não tem como vazar.
+     · desenhada até `s` -> offset = D - s. O trecho 0..s cai na banda acesa e
+       o resto na apagada, com a mesma folga.
+
+   Como D é inteiro, ele vai pro estilo exato, sem arredondamento nenhum. */
+function hsLinhaFatiar(emPixels){
   for (const f of hsLinha.fatias) f.el.remove();
   hsLinha.fatias = [];
-  hsLinha.fatiaAtiva = -1;
+  hsLinha.ativa = -1;
 
   let acumulado = 0;
-  for (let i = 0; i < ds.length; i++) {
-    const el = document.createElementNS(NS, 'path');
-    el.setAttribute('d', ds[i]);
+  for (const d of linhaSegmentos(emPixels)) {
+    const el = document.createElementNS(LINHA_NS, 'path');
+    el.setAttribute('d', d);
     hsLinha.svg.appendChild(el);
 
     const comp = el.getTotalLength();
-    el.style.strokeDasharray = comp.toFixed(1);
-    el.style.strokeDashoffset = comp.toFixed(1);
+    const dash = Math.ceil(comp) + 1;
+    el.style.strokeDasharray = dash + ' ' + dash;
 
-    hsLinha.fatias.push({ el, inicio: acumulado, comp });
+    const f = { el, inicio: acumulado, comp, dash, feito: -1 };
+    hsLinhaFatiaEm(f, 0);          // nasce escondida
+    hsLinha.fatias.push(f);
     acumulado += comp;
   }
-  hsLinha.comprimentoFatias = acumulado;
-  hsLinha.path.setAttribute('stroke', 'none');   // vira só régua de medida
+  hsLinha.comprimento = acumulado;
+}
+
+/* Único lugar que escreve `stroke-dashoffset`. `feito` é o quanto DESTA fatia
+   já está desenhado — em vez do offset invertido, que era fácil de trocar de
+   sinal sem perceber. */
+function hsLinhaFatiaEm(f, feito){
+  if (f.feito === feito) return;
+  f.feito = feito;
+  f.el.style.strokeDashoffset = (f.dash - feito).toFixed(1);
+}
+
+/* TABELA DE X POR COMPRIMENTO — montada uma vez por layout, usada no quadro.
+
+   Anda pelas próprias fatias, sem caminho-mestre escondido: a versão anterior
+   mantinha um <path> a mais no DOM só pra servir de régua, e ele era a única
+   razão de existir um `stroke: none` no meio do código.
+
+   O X é forçado a crescer (Math.max) porque a curva pode recuar um triz nas
+   viradas, e sem isso a busca binária ficaria ambígua. */
+function hsLinhaMedirX(){
+  const fatias = hsLinha.fatias;
+  const total = hsLinha.comprimento;
+  if (!fatias.length || total <= 0) { hsLinha.tabelaX = null; return; }
+
+  const N = LINHA.amostras;
+  const tabela = new Float32Array(N + 1);
+  let fatia = 0, maiorX = -Infinity;
+
+  for (let i = 0; i <= N; i++) {
+    const s = total * i / N;
+    while (fatia < fatias.length - 1 && s >= fatias[fatia].inicio + fatias[fatia].comp) fatia++;
+    const f = fatias[fatia];
+    const dentro = Math.min(f.comp, Math.max(0, s - f.inicio));
+    maiorX = Math.max(maiorX, f.el.getPointAtLength(dentro).x);
+    tabela[i] = maiorX;
+  }
+
+  hsLinha.tabelaX = tabela;
 }
 
 /* Põe as fatias no estado correspondente a `s` (comprimento de arco já
@@ -943,51 +1078,25 @@ function hsLinhaAplicar(s){
   const fatias = hsLinha.fatias;
   if (!fatias.length) return;
 
-  let ativa = hsLinha.fatiaAtiva;
-  if (ativa < 0) ativa = 0;
-
-  // caminha até a fatia que contém a ponta (poucos passos, e só quando muda)
+  let ativa = hsLinha.ativa < 0 ? 0 : hsLinha.ativa;
   while (ativa > 0 && s < fatias[ativa].inicio) ativa--;
   while (ativa < fatias.length - 1 && s >= fatias[ativa].inicio + fatias[ativa].comp) ativa++;
 
-  if (ativa !== hsLinha.fatiaAtiva) {
+  if (ativa !== hsLinha.ativa) {
     for (let i = 0; i < fatias.length; i++) {
       if (i === ativa) continue;
-      const f = fatias[i];
-      const alvo = i < ativa ? 0 : f.comp;
-      if (f.desenhado !== alvo) {
-        f.desenhado = alvo;
-        f.el.style.strokeDashoffset = alvo.toFixed(1);
-      }
+      // as de trás ficam inteiras, as da frente ficam escondidas
+      hsLinhaFatiaEm(fatias[i], i < ativa ? fatias[i].comp : 0);
     }
-    hsLinha.fatiaAtiva = ativa;
+    hsLinha.ativa = ativa;
   }
 
   const f = fatias[ativa];
-  const dentro = Math.max(0, Math.min(f.comp, s - f.inicio));
-  const off = f.comp - dentro;
-  if (f.desenhado !== off) {
-    f.desenhado = off;
-    f.el.style.strokeDashoffset = off.toFixed(1);
-  }
+  hsLinhaFatiaEm(f, Math.min(f.comp, Math.max(0, s - f.inicio)));
 }
 
 
 let hsLinhaRetentativa = 0;
-
-const hsLinha = (() => {
-  if (!hsTrack) return null;
-  const NS = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(NS, 'svg');
-  svg.setAttribute('class', 'hs-linha');
-  svg.setAttribute('aria-hidden', 'true');
-  svg.setAttribute('preserveAspectRatio', 'none');
-  const path = document.createElementNS(NS, 'path');
-  svg.appendChild(path);
-  hsTrack.insertBefore(svg, hsTrack.firstChild);
-  return { svg, path, anim: null, larguraMedida: 0, alturaMedida: 0, prog: 0,
-           fatias: [], fatiaAtiva: -1, desenhavel: false };
-})();
 
 function hsLinhaLayout(){
   if (!hsLinha) return;
@@ -997,19 +1106,14 @@ function hsLinhaLayout(){
 
   /* MEDIDA DEGENERADA NÃO VIRA DESENHO.
 
-     Aqui havia `|| 1` nos dois valores, o que parecia uma proteção e era o
-     contrário: quando a janela reportava 0 — aba em segundo plano, momento
-     do carregamento, ancestral ainda sem caixa —, o caminho era construído
-     num painel de 1x1 pixel. Vi isso acontecer: o viewBox saiu "0 0 5 1" e a
-     linha inteira coube em 8 pixels de comprimento.
-
-     Pior que o erro em si, o guarda de resize logo abaixo guardava essa
-     medida como boa e não remontava mais. Um instante ruim no carregamento
-     deixava a linha quebrada para sempre.
-
-     Agora medida inválida não é aceita: nada é construído e uma nova tentativa
-     é agendada. Enquanto isso a linha fica sem a classe que a esconde, ou
-     seja, visível e inteira — que é o estado seguro. */
+     Aqui já houve um `|| 1` nos dois valores, que parecia proteção e era o
+     contrário: quando a janela reportava 0 — aba em segundo plano, momento do
+     carregamento, ancestral ainda sem caixa —, o caminho era construído num
+     painel de 1x1 pixel e o viewBox saía "0 0 5 1". Pior: o guarda de resize
+     logo abaixo guardava essa medida como boa e não remontava mais, então um
+     instante ruim no carregamento deixava a linha quebrada pra sempre.
+     Medida inválida agora não é aceita: nada é construído e uma nova tentativa
+     é agendada. */
   if (W < 2 || H < 2) {
     clearTimeout(hsLinhaRetentativa);
     hsLinhaRetentativa = setTimeout(hsLinhaLayout, 250);
@@ -1017,9 +1121,7 @@ function hsLinhaLayout(){
   }
 
   /* Só remonta quando muda o que importa. A largura sempre importa; a altura
-     só quando muda de verdade, porque no celular a barra do navegador some e
-     volta o tempo todo e cada uma dessas mexidas dispara um resize. Remontar
-     ali reiniciaria o desenho no meio da rolagem — o pulo que a pessoa vê. */
+     só quando muda de verdade — ver `toleranciaDeAltura`. */
   const mudouLargura = W !== hsLinha.larguraMedida;
   const mudouAltura = hsLinha.alturaMedida > 0 &&
     Math.abs(H - hsLinha.alturaMedida) / hsLinha.alturaMedida > LINHA.toleranciaDeAltura;
@@ -1028,67 +1130,23 @@ function hsLinhaLayout(){
   hsLinha.larguraMedida = W;
   hsLinha.alturaMedida = H;
 
-  /* As coordenadas já vêm normalizadas: x em larguras de painel, y em frações
-     da altura. Converter é multiplicar — não há escala, nem viewBox esticado,
-     nem transform. Cada composição foi desenhada no formato em que vai ser
-     usada, então o que chega aqui já está certo para esta tela.
-
-     A `amplitude` recolhe o desenho em direção ao meio vertical sem mudar a
-     forma dele, e existe só como ajuste fino: em 1 vale o que foi desenhado. */
-  const meio = 0.5;
-  const emPixels = linhaComposicao(W, H).map(([x, y]) => [
-    x * W,
-    (meio + (y - meio) * LINHA.amplitude) * H
-  ]);
-  hsLinha.path.setAttribute('d', linhaCaminho(emPixels, LINHA.tensao));
+  const traco = Math.min(LINHA.espessuraMax,
+                Math.max(LINHA.espessuraMin, W / LINHA.espessuraDivisor));
   hsLinha.svg.setAttribute('viewBox', `0 0 ${W * hsPanelCount} ${H}`);
-  hsLinhaFatiar(emPixels);
+  hsLinha.svg.style.setProperty('--linha-traco', traco.toFixed(2) + 'px');
 
-  const traco = Math.max(LINHA.espessuraMin,
-                Math.min(LINHA.espessuraMax, W / LINHA.espessuraDivisor));
-  hsLinha.svg.style.setProperty('--traco', traco.toFixed(2) + 'px');
-  hsLinha.svg.style.setProperty('--opacidade', String(LINHA.opacidade));
-  const comprimento = hsLinha.path.getTotalLength();
-
-
-  /* TABELA DE X POR COMPRIMENTO — montada aqui, usada no quadro.
-
-     O desenho anda por comprimento de arco; a tela anda por X. Os dois não
-     são proporcionais: onde o traço sobe quase na vertical ele gasta muito
-     comprimento sem avançar quase nada em X. Medi o efeito disso: até 70% do
-     percurso a ponta do lápis estava dentro da janela visível, mas a partir
-     dos 80% ela disparava na frente — a janela mostrava de 3,20 a 4,20 e a
-     ponta já estava em 4,37. Da metade do "I ANIMATE" em diante você via a
-     linha pronta em vez de vê-la sendo feita.
-
-     Com esta tabela dá pra fazer o caminho inverso: sei onde a ponta precisa
-     estar em X e descubro que fração do comprimento corresponde. O X é
-     forçado a crescer (Math.max) porque a curva pode recuar um triz nas
-     viradas, e sem isso a busca ficaria ambígua.
-
-     São 256 amostras, medidas uma vez por layout. */
-  const N = 256;
-  const tabela = new Float32Array(N + 1);
-  let maiorX = -Infinity;
-  for (let i = 0; i <= N; i++) {
-    const pt = hsLinha.path.getPointAtLength(comprimento * i / N);
-    maiorX = Math.max(maiorX, pt.x);
-    tabela[i] = maiorX;
-  }
-  hsLinha.tabelaX = tabela;
-  hsLinha.xInicial = tabela[0];
-  hsLinha.xFinal = tabela[N];
-  hsLinha.larguraPainel = W;
+  hsLinhaFatiar(linhaPontos(W, H));
+  hsLinhaMedirX();
 
   if (PREFERE_MENOS_MOVIMENTO) {
-    /* sem movimento a linha aparece inteira, sem ser desenhada — e o
-       `desenhavel` é o que impede o quadro de voltar a escondê-la */
-    hsLinha.desenhavel = false;
-    for (const f of hsLinha.fatias) { f.desenhado = 0; f.el.style.strokeDashoffset = '0'; }
+    /* sem movimento a linha aparece inteira, sem ser desenhada — e o `pronta`
+       é o que impede o quadro de voltar a escondê-la */
+    hsLinha.pronta = false;
+    for (const f of hsLinha.fatias) hsLinhaFatiaEm(f, f.comp);
     return;
   }
 
-  hsLinha.desenhavel = true;
+  hsLinha.pronta = true;
 
   // devolve o desenho ao ponto em que estava: sem isto, todo resize (e toda
   // mexida na barra do navegador) apagaria a linha e recomeçaria do zero
@@ -1099,19 +1157,20 @@ function hsLinhaLayout(){
 /* =========================================================================
    DESENHO — o quadro
 
-   `prog` é o mesmo 0..1 que move o trilho, então a linha e os painéis são
-   comandados pelo mesmo número e não têm como dessincronizar. A animação dura
-   1s de propósito: o progresso vira milissegundos direto, sem conta.
+   `prog` é o mesmo 0..1 que move o trilho, então linha e painéis são comandados
+   pelo mesmo número e não têm como dessincronizar. Nada aqui lê layout: é uma
+   busca binária sobre um Float32Array e uma escrita de estilo.
    ========================================================================= */
 
-/* Acha a fração do comprimento cuja ponta está em `alvoX`. Busca binária em
-   256 valores: oito comparações, sem tocar no DOM nem no layout. */
+/* Acha a fração do comprimento cuja ponta está em `alvoX`. Oito comparações
+   sobre as 256 amostras, sem tocar no DOM. */
 function hsLinhaFracaoEm(alvoX){
   const t = hsLinha.tabelaX;
   if (!t) return 0;
   const ultimo = t.length - 1;
   if (alvoX <= t[0]) return 0;
   if (alvoX >= t[ultimo]) return 1;
+
   let lo = 0, hi = ultimo;
   while (hi - lo > 1) {
     const meio = (lo + hi) >> 1;
@@ -1126,28 +1185,48 @@ function hsLinhaFracaoEm(alvoX){
 function hsLinhaDesenhar(prog){
   if (!hsLinha) return;
   hsLinha.prog = prog;
-  if (!hsLinha.desenhavel || !hsLinha.tabelaX) return;
+  if (!hsLinha.pronta || !hsLinha.tabelaX) return;
 
-  /* A PONTA DO LÁPIS ANDA EM X, não em comprimento de traço.
+  /* A PONTA DO LÁPIS É POSICIONADA NA JANELA, não no caminho.
 
-     Ela vai do COMEÇO DO CAMINHO até o fim dele, proporcional ao progresso.
-     Começar no começo é o que faz o traço entrar pela lateral: em prog 0 nada
-     está desenhado e a linha nasce da borda esquerda, fora da tela.
+     POR QUE MUDOU: antes a ponta ia do começo do caminho (-0,15 larguras) até
+     o fim (5,00), proporcional ao progresso. Parece certo e não é, porque a
+     JANELA também está andando — ela cobre de 4·prog a 4·prog+1. Fazendo a
+     conta, a ponta ficava à esquerda da borda visível enquanto
+     -0,15 + 5,15·prog < 4·prog, ou seja, até prog 0,13. Traduzindo: os
+     primeiros 13% do scroll lateral não mostravam NADA, e a linha só brotava
+     no meio do "MORE THAN A DEVELOPER". Era exatamente o que se via.
 
-     Cheguei a pôr a ponta num ponto fixo da janela visível (62% da largura),
-     achando que garantia visibilidade. Garantia, e ao preço de estragar a
-     entrada: 62% do primeiro painel já nascia pronto, e a linha começava no
-     meio da tela em vez de vir da lateral.
+     Agora a ponta é medida A PARTIR DA BORDA ESQUERDA DA JANELA, e não do
+     caminho. `entradaEm` é onde ela está quando o painel começa a andar,
+     `saidaEm` onde ela termina — os dois em larguras de painel, contados da
+     borda esquerda da tela. Como a conta já embute o deslocamento da janela,
+     a ponta não tem mais como ficar para trás dela.
 
-     Não era necessário. Fazendo a conta: a janela cobre de 4·prog a
-     4·prog+1 painéis, e a ponta vai de -0,08 a 5,00. A ponta só fica à
-     esquerda da janela enquanto prog < 0,074 — ou seja, durante os primeiros
-     7% ela está entrando pela borda — e daí até o fim ela está sempre dentro
-     do campo de visão. Os dois objetivos ao mesmo tempo, sem truque. */
-  const alvoX = hsLinha.xInicial + (hsLinha.xFinal - hsLinha.xInicial) * prog;
+     A CURVA É RÁPIDA NAS PONTAS E LENTA NO MEIO, e isso resolve os dois
+     problemas de uma vez. Só desacelerar no fim (que foi a primeira tentativa)
+     colava a ponta na borda direita a partir de uns 75% do percurso: a ponta
+     ficava fora da tela até o painel chegar, então você via a linha PRONTA em
+     vez de vê-la sendo feita. Só acelerar no começo trazia de volta o atraso
+     na entrada.
 
+     Aqui a ponta corre nas duas bordas e passeia devagar pelo miolo:
+
+        prog     0.05    0.25    0.50    0.75    1.00
+        na tela    5%     34%     48%     61%     100%
+
+     Ela entra logo, atravessa a parte central sempre com meia tela de espaço
+     em branco na frente — que é onde o desenho acontece à vista — e só corre
+     pra borda direita no fim, fechando o traço em cima do último painel.
+     Com `aceleracao: 1` a curva vira uma reta e some tudo isso. */
+  const janela = (hsPanelCount - 1) * prog;          // borda esquerda, em larguras
+  const meio = 2 * prog - 1;                         // -1 na entrada, +1 na saída
+  const entrada = 0.5 + 0.5 * Math.sign(meio) * Math.pow(Math.abs(meio), LINHA.aceleracao);
+  const desloc = LINHA.entradaEm + (LINHA.saidaEm - LINHA.entradaEm) * entrada;
+
+  const alvoX = (janela + desloc) * hsLinha.larguraMedida;
   const fracao = Math.max(0, Math.min(1, hsLinhaFracaoEm(alvoX)));
-  hsLinhaAplicar(fracao * hsLinha.comprimentoFatias);
+  hsLinhaAplicar(fracao * hsLinha.comprimento);
 }
 
 /* O pin vale em TODAS as larguras agora. Antes havia um desvio aqui que, no
