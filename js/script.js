@@ -699,8 +699,28 @@ function amplitudeDaTela(width){
   return MAX_AMPLITUDE * fator;
 }
 
-function buildCapWavePath(progress, width){
-  const rise = (amplitudeDaTela(width) / 2) * Math.pow(progress, 2);
+/* O CAMINHO É CONSTRUÍDO NA AMPLITUDE MÁXIMA, UMA VEZ POR LARGURA.
+
+   Antes ele recebia o `progress` e era remontado a cada quadro de rolagem: 62
+   comandos `L` concatenados em texto, o atributo `d` reescrito, o caminho
+   reanalisado pelo navegador e a faixa inteira repintada. Medido no celular
+   emulado: 375x206px de repintura por quadro — 25% da tela, na thread
+   principal, exatamente enquanto o dedo rola.
+
+   E era trabalho desnecessário, porque a FORMA nunca muda. Olhando a conta:
+
+       y = base - rise * (1 + sin(x))       rise = (amp/2) * progress²
+
+   o `progress` aparece só como um fator multiplicando a altura inteira. Ou
+   seja, a onda de qualquer progresso é a onda máxima achatada na vertical —
+   e achatar na vertical é `scaleY`, que o compositor faz sem repintar nada.
+
+   Então o caminho passa a ser montado na amplitude cheia (progress = 1) e o
+   scroll só escreve `transform: scaleY(progress²)` no <svg>, com a origem na
+   linha de base (ver `--onda-base` no css/estilo.css). O resultado na tela é
+   o mesmo pixel a pixel — a conta acima é a mesma, só reagrupada. */
+function buildCapWavePath(width){
+  const rise = amplitudeDaTela(width) / 2;
   const segments = 60;
   let d = `M0,${FLOOR_Y} L0,${BASELINE_LOCAL}`;
 
@@ -716,6 +736,18 @@ function buildCapWavePath(progress, width){
 }
 
 waveCapSvg.setAttribute('viewBox', `0 0 1 ${SVG_HEIGHT}`);
+
+/* A ORIGEM DO scaleY, ENTREGUE AO CSS.
+
+   O achatamento tem de girar em torno da LINHA DE BASE da onda, não do fundo
+   da caixa: abaixo da base ainda há a saia de `CAP_HEIGHT + OVERLAP` que
+   emenda a faixa com a seção branca, e ela não pode encolher junto.
+
+   A conta é a mesma dos dois lados e sai daqui, das constantes que já
+   definem o viewBox — assim o CSS não guarda um número copiado que possa
+   ficar velho se o desenho mudar. Quem cobre a saia é o `.wave-cap::after`,
+   que é estático. */
+waveCap?.style.setProperty('--onda-base', (BASELINE_LOCAL / SVG_HEIGHT).toFixed(6));
 
 /* A versão anterior chamava requestAnimationFrame em cadeia pra sempre: mesmo
    com a página parada, ou com a onda a 6 telas de distância, o navegador
@@ -757,10 +789,23 @@ function medirWaveCap(){
   return { progress, vw, key };
 }
 
+/* A largura para a qual o caminho atual foi montado. Só ela obriga a remontar
+   — e ela só muda no resize. */
+let larguraDaOnda = 0;
+
+function montarOnda(vw){
+  if (vw === larguraDaOnda) return;
+  larguraDaOnda = vw;
+  waveCapSvg.setAttribute('viewBox', `0 0 ${vw} ${SVG_HEIGHT}`);
+  waveCapPath.setAttribute('d', buildCapWavePath(vw));
+}
+
 function aplicarWaveCap(onda){
   lastWaveKey = onda.key;
-  waveCapSvg.setAttribute('viewBox', `0 0 ${onda.vw} ${SVG_HEIGHT}`);
-  waveCapPath.setAttribute('d', buildCapWavePath(onda.progress, onda.vw));
+  montarOnda(onda.vw);
+  /* progress² é o mesmo expoente que estava no `rise` — ver buildCapWavePath */
+  const p = onda.progress;
+  waveCapSvg.style.transform = `scaleY(${(p * p).toFixed(5)})`;
 }
 
 function desenharWaveCap(){
@@ -816,8 +861,15 @@ let hsTarget = 0;
    (NaN nunca é igual a nada, nem a si mesmo). */
 let hsDesenhado = NaN;
 /* quanto o trilho anda do começo ao fim, em px — é o que transforma a posição
-   atual em progresso de 0 a 1 pra linha */
+   atual em progresso de 0 a 1 pra linha. Medido no layout, junto com a altura
+   da seção, para ser exatamente o mesmo número que vai no `--hs-percurso` lido
+   pela animação do CSS. */
 let hsPercurso = 0;
+
+/* Onde, dentro da faixa `contain` do `.hs-outer`, o percurso horizontal
+   termina — o resto da faixa é a pausa com o último painel parado. Também sai
+   do layout, e é o mesmo número que vira `--hs-fim`. */
+let hsFimFracao = 1;
 
 const EXTRA_PIN_VH = 0.2; // nº de telas extras de pausa antes do .stack começar a subir — ajuste aqui
 
@@ -1525,6 +1577,26 @@ function hsLayout(){
   hsAltura = Math.round(rolagemHorizontal + H * (1 + EXTRA_PIN_VH) + H);
   hsOuter.style.height = hsAltura + 'px';
 
+  /* OS DOIS NÚMEROS QUE A ANIMAÇÃO DO CSS PRECISA (ver o bloco
+     `animation-timeline` no css/estilo.css).
+
+       --hs-percurso  quanto o trilho anda de ponta a ponta, em px;
+       --hs-fim       em que ponto da faixa `contain` esse percurso termina.
+
+     A faixa `contain` inteira vale `hsAltura - altura da tela`; o percurso
+     horizontal ocupa só `rolagemHorizontal` dela, e o resto é a pausa com o
+     último painel parado. A divisão entre os dois é o `--hs-fim`.
+
+     Escrito em TODO layout, e não só quando o CSS está no comando: custa duas
+     escritas por resize e evita que a variável fique velha se o aparelho
+     mudar de categoria (girar um tablet, plugar um mouse). */
+  const alcanceContain = Math.max(hsAltura - H, 1);
+  hsFimFracao = Math.min(1, rolagemHorizontal / alcanceContain);
+  hsPercurso = percurso;
+
+  hsTrack.style.setProperty('--hs-percurso', percurso.toFixed(2) + 'px');
+  hsTrack.style.setProperty('--hs-fim', (hsFimFracao * 100).toFixed(4) + '%');
+
   /* A altura acabou de mudar, então o percurso e o progresso também mudaram:
      o próximo quadro tem de desenhar mesmo que o trilho esteja no mesmo px. */
   hsDesenhado = NaN;
@@ -1725,6 +1797,22 @@ function atualizarProgressoPaineis(){
    amortecer o que já é suave só custaria os quadros da cauda. */
 const HS_SUAVIZA = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
+/* QUEM MOVE O TRILHO: o navegador ou este arquivo.
+
+   A condição é a MESMA do bloco `@supports (animation-timeline: view())` no
+   css/estilo.css — se as duas saírem de sincronia, ou o trilho não anda, ou
+   anda duas vezes. Uma constante de cada lado, com a mesma pergunta.
+
+   Quando o CSS assume, este arquivo não escreve mais o transform do trilho.
+   Continua calculando `hsCurrent`, porque a linha desenhada e o jardim dos
+   painéis dependem dele — mas esses dois moram DENTRO dos painéis, então
+   viajam junto com o trilho de graça. Um quadro de atraso na florada, com a
+   flor já indo no lugar certo, não se vê; um quadro de atraso no trilho
+   inteiro é justamente o que se estava vendo. */
+const HS_CSS_MOVE =
+  !!(window.CSS && CSS.supports && CSS.supports('animation-timeline: view()')) &&
+  window.matchMedia('(hover: none), (pointer: coarse)').matches;
+
 /* O AMORTECIMENTO É POR TEMPO, NÃO POR QUADRO.
 
    O 0.12 é o valor original e continua valendo: ele é a fração do caminho que
@@ -1757,7 +1845,10 @@ let hsUltimoT = 0;
    `hsLinhaDesenhar` só escreve currentTime. É o que permite esta função morar
    na passada de desenho, depois de todo mundo ter medido. */
 function hsDesenhar(){
-  hsTrack.style.transform = `translate3d(${-hsCurrent}px, 0, 0)`;
+  /* Com o CSS no comando o transform vem da animação ligada à rolagem, e uma
+     escrita inline aqui seria ignorada de qualquer forma (animação ganha de
+     estilo inline na cascata). Pular a escrita economiza a invalidação. */
+  if (!HS_CSS_MOVE) hsTrack.style.transform = `translate3d(${-hsCurrent}px, 0, 0)`;
   atualizarProgressoPaineis();
   hsLinhaDesenhar(hsPercurso ? hsCurrent / hsPercurso : 0);
 }
@@ -1813,6 +1904,27 @@ function hsRender(){
 
 function hsUpdate(){
   const rect = hsOuter.getBoundingClientRect();
+
+  /* COM O CSS NO COMANDO, A CONTA TEM DE SER A DO NAVEGADOR.
+
+     A linha desenhada e o jardim dos painéis continuam sendo posicionados
+     aqui, e eles precisam concordar com onde o trilho de fato está. A faixa
+     `contain` do navegador é medida contra a tela REAL — que no celular muda
+     de altura quando a barra de endereço aparece e some —, enquanto o caminho
+     de JavaScript usa a altura presa do trilho (`100svh`, que não muda, de
+     propósito). Usar a régua errada aqui deixaria a ponta do lápis alguns por
+     cento adiante ou atrás do painel.
+
+     Mesma fração dos dois lados, mesma tela dos dois lados: a ponta fica onde
+     o painel está. */
+  if (HS_CSS_MOVE) {
+    const alcance = Math.max(hsAltura - Agenda.h, 1);
+    const fim = Math.max(alcance * hsFimFracao, 1);
+    const p = Math.min(Math.max(-rect.top / fim, 0), 1);
+    hsTarget = p * hsPercurso;
+    return;
+  }
+
   // hsAltura no lugar de hsOuter.offsetHeight: mesmo número, sem leitura de layout
   /* `hsAlturaTela`, e não `window.innerHeight`, PELO MESMO MOTIVO do hsLayout
      — e aqui a consistência é obrigatória, não preferência: esta conta desfaz
@@ -1831,7 +1943,6 @@ function hsUpdate(){
   const horizontalTotal = Math.max(total - hsAlturaTela * (1 + EXTRA_PIN_VH), 1);
   const progress = Math.min(Math.max(-rect.top / horizontalTotal, 0), 1);
 
-  hsPercurso = (hsPanelCount - 1) * window.innerWidth;
   hsTarget = progress * hsPercurso;
 }
 

@@ -250,6 +250,47 @@ body{
   width: 100%;
   height: 100%;
   overflow: visible;
+
+  /* A ONDA CRESCE POR `scaleY`, E NÃO POR UM CAMINHO NOVO A CADA QUADRO.
+
+     O porquê está no `buildCapWavePath` do js/script.js: a forma da onda é a
+     mesma em qualquer progresso, só mais baixa — então achatar na vertical dá
+     exatamente o mesmo desenho que remontar o `d`. A diferença é que remontar
+     repinta a faixa inteira (375x206px no celular, 25% da tela, por quadro) e
+     achatar é uma matriz no compositor.
+
+     A ORIGEM É A LINHA DE BASE, não o fundo da caixa. Abaixo da base existe a
+     saia que emenda a faixa com a seção branca, e ela não pode encolher junto
+     — quem a cobre é o ::after logo abaixo, que é estático. O `--onda-base` é
+     escrito pelo js/script.js a partir das mesmas constantes que montam o
+     viewBox, para os dois lados não poderem sair de sincronia. */
+  transform-origin: 0 calc(var(--altura-onda) * var(--onda-base, 0.9959));
+
+  /* Aqui o `will-change` se paga: ele troca uma repintura de um quarto da tela
+     por quadro por UMA rasterização, feita uma vez por largura de janela. O
+     caminho nunca muda depois de montado, então a camada nunca é refeita. */
+  will-change: transform;
+}
+
+/* A SAIA DA ONDA — a emenda com a seção branca, parada.
+
+   Ela vinha desenhada dentro do próprio caminho (os dois últimos comandos,
+   descendo da base até o FLOOR_Y). Com o `scaleY` isso deixou de servir: a
+   saia encolheria junto com a crista e abriria uma fresta do hero entre a onda
+   e a seção branca justamente quando a onda está baixa.
+
+   Aqui ela é um retângulo estático da mesma cor, ancorado na linha de base e
+   passando 8px para dentro da seção seguinte — que também é branca, então a
+   sobra não aparece. */
+.wave-cap::after{
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--altura-onda) * var(--onda-base, 0.9959));
+  bottom: -8px;
+  background: var(--white);
+  pointer-events: none;
 }
 
 .wave-cap path{
@@ -293,6 +334,79 @@ body{
   height: 100svh;
   width: max-content;
 }
+
+/* =========================================================================
+   O TRILHO MOVIDO PELO PRÓPRIO NAVEGADOR (celular e tablet)
+
+   ESTE É O CONSERTO DO TRAVAMENTO NO CELULAR, e ele não é uma economia de
+   trabalho: é uma mudança de THREAD.
+
+   No celular a rolagem acontece na thread do COMPOSITOR — o dedo move a
+   página mesmo com a thread principal ocupada, e é por isso que a página em
+   si nunca engasga. O trilho, porém, era movido por JavaScript: evento de
+   scroll -> thread principal -> rAF -> escreve o transform. Duas
+   consequências, as duas ruins:
+
+     · o transform chega SEMPRE pelo menos um quadro depois da rolagem que o
+       causou. O fundo já andou, o trilho ainda não. Isso não é queda de FPS,
+       mas é exatamente o que se sente como uma;
+     · durante um arremesso (fling) o compositor entrega quadros a 120Hz e a
+       thread principal não acompanha. Aí os quadros do trilho passam a sair
+       aos pares, aos trios, e vira o travamento de verdade.
+
+   Nenhuma otimização de JavaScript conserta isso, porque o problema não é o
+   custo do JavaScript — é o fato de ele estar na outra thread.
+
+   `animation-timeline` resolve na raiz: a animação passa a ser amostrada pelo
+   COMPOSITOR, a partir do mesmo deslocamento de rolagem e no mesmo quadro. O
+   trilho fica grudado no dedo por construção, e o JavaScript deixa de
+   participar do movimento.
+
+   COMO A FAIXA É DEFINIDA
+   `contain` é a faixa em que o `.hs-outer` cobre a tela inteira: 0% quando o
+   topo dele encosta no topo da tela, 100% quando a base dele encosta na base.
+   O percurso horizontal termina antes disso, porque o fim da seção é uma
+   pausa com o último painel parado — daí o `--hs-fim`, que o js/script.js
+   escreve a cada layout com a mesma conta que o caminho de JavaScript usa.
+
+   POR QUE SÓ NO TOQUE
+   No desktop o trilho é amortecido por lerp (ver HS_SUAVIDADE no
+   js/script.js), e esse amortecimento existe para absorver o pulo de ~100px
+   de cada clique da roda do mouse. Uma animação ligada à rolagem é exata: ela
+   devolveria o pulo. No toque não há pulo nenhum para absorver — o dedo já
+   entrega movimento contínuo e o navegador ainda dá a inércia por cima —,
+   então lá o exato é justamente o que se quer.
+
+   Sem suporte, nada disto existe e o caminho de JavaScript continua sendo o
+   único. É adição, não substituição.
+   ========================================================================= */
+
+@keyframes hsCorre{
+  from{ transform: translate3d(0, 0, 0); }
+  to  { transform: translate3d(calc(var(--hs-percurso, 0px) * -1), 0, 0); }
+}
+
+@supports (animation-timeline: view()){
+  @media (hover: none), (pointer: coarse){
+    .hs-outer{
+      view-timeline-name: --hs-pin;
+      view-timeline-axis: block;
+    }
+
+    /* As longhands são de propósito: o atalho `animation` REINICIA
+       `animation-timeline` e `animation-range` para o valor inicial, e as duas
+       linhas abaixo seriam apagadas por ele dependendo da ordem. */
+    .hs-track{
+      animation-name: hsCorre;
+      animation-duration: auto;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: --hs-pin;
+      animation-range: contain 0% contain var(--hs-fim, 100%);
+    }
+  }
+}
+
 
 /* O `will-change` NÃO VALE A PÁGINA INTEIRA.
 
@@ -1875,11 +1989,20 @@ body{
   animation: stackMarquee var(--marquee-dur, 24s) linear infinite;
 }
 
-/* Um único conjunto de quadros para os dois sentidos: `reverse` toca os mesmos
-   valores de trás pra frente. Com `linear` isso é exatamente a antiga
-   `stackMarqueeRight`, e é uma animação a menos para o navegador guardar. */
+/* DOIS CONJUNTOS DE QUADROS, E NÃO UM COM `animation-direction: reverse`.
+
+   O reverse é a forma enxuta de escrever isto e foi o que ficou aqui primeiro.
+   No celular o resultado foi inequívoco: as faixas da ESQUERDA (direção
+   normal) rodavam lisas e as da DIREITA (reverse) engasgavam — mesma
+   animação, mesma duração, mesmo tamanho de camada, só a direção diferente.
+   O sintoma aponta para o compositor recusando a animação invertida e
+   devolvendo-a à thread principal, que é onde o scroll também está.
+
+   Escrever os quadros já na ordem certa custa uma regra a mais e tira a
+   variável do caminho: as duas direções passam a ser animações comuns, tocadas
+   para a frente, e o navegador trata as oito trilhas exatamente igual. */
 .stack-marquee--right .stack-marquee-track{
-  animation-direction: reverse;
+  animation-name: stackMarqueeDireita;
 }
 
 /* Pausar é a única coisa que o hover faz. `animation-play-state` não repinta
@@ -1891,6 +2014,11 @@ body{
 @keyframes stackMarquee{
   from{ transform: translate3d(0, 0, 0); }
   to  { transform: translate3d(-100%, 0, 0); }
+}
+
+@keyframes stackMarqueeDireita{
+  from{ transform: translate3d(-100%, 0, 0); }
+  to  { transform: translate3d(0, 0, 0); }
 }
 
 .stack-item{
@@ -2764,10 +2892,43 @@ body{
    O `1` do fallback é a rede de segurança: se o JS não rodar, não escrever a
    variável ou escrever lixo, o cálculo cai no 1 e a foto simplesmente aparece
    — o mesmo destino de quem não tem a classe. */
+/* A JANELA É UMA CORTINA QUE DESCE, E NÃO UM `clip-path`.
+
+   O gesto é o mesmo e o resultado na tela é o mesmo; o que muda é quem paga.
+   `clip-path` não é uma propriedade que o compositor saiba animar: cada valor
+   novo REPINTA o elemento recortado. E aqui o elemento recortado é uma foto
+   com máscara em degradê e `filter` por cima — a repintura mais cara que esta
+   página tem. Medido no celular emulado: 200x297px por quadro, quase 20% da
+   tela, na thread principal, exatamente enquanto o dedo rola. Era isso que se
+   sentia como "não está suave".
+
+   A cortina é um retângulo da cor do fundo da seção (`--bg`, que é chapada
+   atrás da foto — sem gradiente, sem nada) deslizando para baixo por
+   `translateY`. Cobrir com uma cor sólida idêntica ao fundo e recortar dão o
+   mesmo pixel; a diferença é que `translateY` o compositor faz sem repintar.
+
+   OS DOIS TRANSLATES SÃO PROPOSITAIS. O de baixo é o deslocamento da própria
+   cortina (0 a 100% da altura da foto: é ele que revela). O de cima é o mesmo
+   empurrão de 34px que a imagem leva — sem ele a linha da cortina descolaria
+   da foto no meio do percurso, porque a foto se move e a cortina não. Os dois
+   são translações, então somam. */
 .bio-retrato.retrato-scrub img{
   opacity: var(--rp, 1);
-  clip-path: inset(0 0 calc((1 - var(--rp, 1)) * 100%) 0);
   transform: translateY(calc((var(--rp, 1) - 1) * 34px));
+}
+
+.bio-retrato.retrato-scrub::after{
+  content: '';
+  position: absolute;
+  /* a sobra lateral cobre o antialiasing da borda da foto */
+  left: -1px;
+  right: -1px;
+  top: 0;
+  height: 100%;
+  background: var(--bg);
+  transform: translateY(calc((var(--rp, 1) - 1) * 34px))
+             translateY(calc(var(--rp, 1) * 100%));
+  pointer-events: none;
 }
 
 /* Cinto e suspensório: o JS já sai de cena sozinho com "reduzir movimento"
