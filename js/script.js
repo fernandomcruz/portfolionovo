@@ -13,22 +13,6 @@
 const APARELHO_DE_TOQUE =
   !window.matchMedia || window.matchMedia('(hover: none), (pointer: coarse)').matches;
 
-/* QUEM MOVE O TRILHO: o navegador ou este arquivo.
-
-   A condição é a MESMA do bloco `@supports (animation-timeline: view())` no
-   css/estilo.css — se as duas saírem de sincronia, ou o trilho não anda, ou
-   anda duas vezes. Uma constante de cada lado, com a mesma pergunta.
-
-   Quando o CSS assume, este arquivo não escreve mais o transform do trilho.
-   Continua calculando `hsCurrent`, porque a linha desenhada e o jardim dos
-   painéis dependem dele — mas esses dois moram DENTRO dos painéis, então
-   viajam junto com o trilho de graça. Um quadro de atraso na florada, com a
-   flor já indo no lugar certo, não se vê; um quadro de atraso no trilho
-   inteiro é justamente o que se estava vendo. */
-const HS_CSS_MOVE =
-  !!(window.CSS && CSS.supports && CSS.supports('animation-timeline: view()')) &&
-  APARELHO_DE_TOQUE;
-
 const PREFERE_MENOS_MOVIMENTO =
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -825,10 +809,13 @@ function montarOnda(vw){
   waveCapPath.setAttribute('d', buildCapWavePath(vw));
 }
 
-/* Quem escreve o scaleY: o navegador ou este arquivo. Mesma pergunta do
-   HS_CSS_MOVE, e sem o recorte de "só no toque" — aqui não há amortecimento
-   nenhum para preservar no desktop, então o compositor é melhor em todo lugar
-   que o suporta. A condição espelha o `@supports` do css/estilo.css. */
+/* Quem escreve o scaleY: o navegador ou este arquivo.
+
+   A onda PODE ficar no compositor onde o trilho não pôde, e a diferença é o
+   fator de ampliação. O percurso horizontal multiplica qualquer imprecisão da
+   faixa por 1,58; a onda não multiplica nada. Um deslize de faixa que ali
+   virava um salto de quase cem pixels, aqui é meio pixel de altura de crista.
+   A condição espelha o `@supports` do css/estilo.css. */
 const ONDA_CSS =
   !!(window.CSS && CSS.supports && CSS.supports('animation-timeline: scroll(root block)'));
 
@@ -970,12 +957,6 @@ let hsParadaDoc = 1;
    ritmo de atualização do conteúdo — ver `hsBombear`. */
 let hsVisivel = false;
 
-/* Ainda falta ligar alguém à rolagem? As animações do CSS só existem depois
-   que o estilo resolve, o que não acontece no primeiro quadro — então a
-   ligação do jardim é tentada de novo até dar certo. Enquanto isso a bomba de
-   quadros continua acordando; assim que tudo está ligado, ela desliga e a
-   seção passa a não custar quadro nenhum de JavaScript. */
-let hsFaltaLigar = true;
 
 const EXTRA_PIN_VH = 0.2; // nº de telas extras de pausa antes do .stack começar a subir — ajuste aqui
 
@@ -1516,10 +1497,10 @@ function hsLinhaFracaoEm(alvoX){
 
 /* Comprimento de arco já desenhado para um dado progresso do trilho.
 
-   Era o miolo do `hsLinhaDesenhar`; virou função própria porque agora tem dois
-   consumidores: o desenho quadro a quadro (onde o JavaScript ainda comanda) e
-   o `hsLinhaLigarNoScroll`, que precisa INVERTER esta conta uma vez por layout
-   para descobrir em que ponto da rolagem cada fatia é traçada. */
+   Era o miolo do `hsLinhaDesenhar` e virou função própria na tentativa de
+   ligar as fatias direto na rolagem. A tentativa foi revertida (ver o
+   css/estilo.css, no bloco sobre `animation-timeline`), mas a separação ficou:
+   a conta da ponta do lápis lida sozinha é mais fácil de acompanhar. */
 function hsLinhaArcoEm(prog){
 
   /* A PONTA DO LÁPIS É POSICIONADA NA JANELA, não no caminho.
@@ -1567,87 +1548,8 @@ function hsLinhaArcoEm(prog){
 function hsLinhaDesenhar(prog){
   if (!hsLinha) return;
   hsLinha.prog = prog;
-  /* Com as fatias ligadas à rolagem, quem escreve o `stroke-dashoffset` é o
-     navegador — e ele o faz no mesmo quadro em que o trilho anda, que é o
-     ponto todo. Ver `hsLinhaLigarNoScroll`. */
-  if (HS_CSS_MOVE) return;
   if (!hsLinha.pronta || !hsLinha.tabelaX) return;
   hsLinhaAplicar(hsLinhaArcoEm(prog));
-}
-
-/* =========================================================================
-   CADA FATIA GANHA A SUA FAIXA DE ROLAGEM
-
-   ESTE É O CONSERTO DO ÚLTIMO TELETRANSPORTE, e a explicação é a mesma que já
-   apareceu três vezes neste arquivo, agora no último lugar onde ela ainda
-   valia.
-
-   O trilho passou a ser movido pelo compositor, a partir do deslocamento
-   verdadeiro da rolagem. A linha continuava sendo desenhada aqui, a partir do
-   `window.scrollY` lido na thread principal. No iOS a rolagem acontece em
-   outro processo e esse número chega atrasado — normalmente por pouco, às
-   vezes por vários quadros. Enquanto o painel deslizava certinho, a ponta do
-   lápis ficava para trás e depois pulava para alcançá-lo. Não era o painel que
-   se teletransportava: era o traço em cima dele.
-
-   Duas contas diferentes, lidas de dois lugares diferentes, nunca ficam
-   juntas. A saída é não ter duas contas: as fatias passam a ser animadas pela
-   MESMA `scroll(root block)` do trilho, então elas são amostradas no mesmo
-   quadro, do mesmo valor. Ficar fora de sincronia deixa de ser possível.
-
-   COMO A FAIXA DE CADA FATIA É ENCONTRADA: o percurso do lápis não é linear no
-   progresso (há a curva de entrada e saída do `LINHA.aceleracao`, e o
-   comprimento de arco não acompanha o X), então não dá para dividir a régua em
-   partes iguais. A conta é invertida por amostragem: varre-se o progresso de 0
-   a 1 e anota-se em que ponto o arco desenhado cruza a fronteira de cada
-   fatia. Como o arco só cresce, uma passada resolve todas.
-
-   Dentro de UMA fatia a interpolação volta a ser linear, e isso é exato o
-   bastante: são 80 a 105 fatias, cada uma cobrindo cerca de 1% do traço.
-   ========================================================================= */
-/* A precisão com que as fronteiras entre fatias são encontradas. 3000 amostras
-   dão umas 25 por fatia mesmo no trecho em que a ponta corre mais rápido (as
-   duas bordas, por causa do `LINHA.aceleracao`), o que garante que duas fatias
-   nunca caiam na mesma fronteira e acendam juntas. Custa uma vez por layout. */
-const LINHA_AMOSTRAS_FAIXA = 3000;
-
-function hsLinhaLigarNoScroll(){
-  if (!hsLinha || !hsLinha.pronta || !hsLinha.tabelaX) return;
-
-  const fatias = hsLinha.fatias;
-  if (!fatias.length) return;
-
-  const span = hsParadaDoc - hsInicioDoc;
-  if (span <= 0) return;
-
-  const marcos = new Float64Array(fatias.length + 1);
-  const fronteira = (i) => (i < fatias.length ? fatias[i].inicio : hsLinha.comprimento);
-
-  let alvo = 0;
-  for (let i = 0; i <= LINHA_AMOSTRAS_FAIXA && alvo <= fatias.length; i++) {
-    const s = hsLinhaArcoEm(i / LINHA_AMOSTRAS_FAIXA);
-    while (alvo <= fatias.length && s >= fronteira(alvo)) marcos[alvo++] = i / LINHA_AMOSTRAS_FAIXA;
-  }
-  while (alvo <= fatias.length) marcos[alvo++] = 1;
-
-  for (let i = 0; i < fatias.length; i++) {
-    const f = fatias[i];
-    const a = hsInicioDoc + marcos[i] * span;
-    const b = Math.max(hsInicioDoc + marcos[i + 1] * span, a + 0.5);
-    const e = f.el.style;
-
-    /* escondida -> offset = dash; inteira -> offset = dash - comprimento.
-       São os mesmos dois valores do `hsLinhaFatiaEm`, só que agora entregues
-       aos quadros da animação em vez de escritos a cada rolagem. */
-    e.setProperty('--dash', f.dash + 'px');
-    e.setProperty('--feito', (f.dash - f.comp).toFixed(2) + 'px');
-    e.animationName = 'hsLinhaDesenha';
-    e.animationTimingFunction = 'linear';
-    e.animationFillMode = 'both';
-    e.animationDuration = 'auto';
-    e.animationTimeline = 'scroll(root block)';
-    e.animationRange = a.toFixed(1) + 'px ' + b.toFixed(1) + 'px';
-  }
 }
 
 /* O pin vale em TODAS as larguras agora. Antes havia um desvio aqui que, no
@@ -1855,9 +1757,8 @@ let trilhoEsquerda = 0;      // borda esquerda do trilho, sem o transform
 let trilhoLarguraPainel = 0; // largura de um painel
 
 /* Quantas larguras de painel o efeito do jardim leva para acontecer. Estava
-   dentro do `atualizarProgressoPaineis`; subiu porque o `ligarCenaNoScroll`
-   inverte a mesma conta e os dois têm de usar o mesmo número. A explicação da
-   régua está lá embaixo, junto do uso original. */
+   dentro do `atualizarProgressoPaineis`. A explicação da régua está lá
+   embaixo, junto do uso. */
 const PERCURSO_PAINEL = 1.35;
 
 function medirGeometriaDoTrilho(){
@@ -1917,57 +1818,9 @@ function coletarCena(painel){
   for (const it of itens) {
     const d = it.a.effect.getTiming().duration;
     it.duracao = typeof d === 'number' && isFinite(d) ? d : 0;
-    /* Pausar só faz sentido quando é este arquivo que vai empurrar o ponteiro.
-       Ligadas à rolagem, elas continuam correndo — quem decide o instante é a
-       faixa de cada uma. */
-    if (!HS_CSS_MOVE) it.a.pause();
+    it.a.pause();
   }
   return itens;
-}
-
-/* =========================================================================
-   O JARDIM TAMBÉM VAI PARA A ROLAGEM
-
-   Mesma história da linha desenhada, e pelo mesmo motivo: escrever
-   `currentTime` a partir do `window.scrollY` da thread principal enquanto o
-   trilho é movido pelo compositor é ter duas réguas, e duas réguas
-   inevitavelmente discordam. Cada flor, cada letra do "DEVELOP" e a régua de
-   build ganham a sua própria faixa de rolagem e passam a ser amostradas junto
-   com o painel em que estão.
-
-   A CONTA É A INVERSA DA QUE JÁ EXISTIA. O `atualizarProgressoPaineis` faz:
-
-       prog = (largura - esquerda) / (largura * PERCURSO_PAINEL)
-       esquerda = borda do trilho + i * largura do painel - deslocamento
-
-   Como o deslocamento é `P * hsPercurso`, `prog` é LINEAR em P — e uma reta se
-   inverte sem aproximação nenhuma. Dado o `--ini` de um elemento, sai o P em
-   que ele começa; do P sai a posição de rolagem. É a mesma calibração do HTML,
-   lida do outro lado.
-   ========================================================================= */
-function ligarCenaNoScroll(item, largura){
-  const span = hsParadaDoc - hsInicioDoc;
-  if (span <= 0 || !hsPercurso) return false;
-
-  const rolagemEm = (prog) => {
-    const deslocamento = prog * largura * PERCURSO_PAINEL - largura
-                       + trilhoEsquerda + item.idx * trilhoLarguraPainel;
-    return hsInicioDoc + (deslocamento / hsPercurso) * span;
-  };
-
-  for (const it of item.cena) {
-    if (!it.el) continue;
-    const a = rolagemEm(it.inicio);
-    const b = Math.max(rolagemEm(it.inicio + it.duracao / 1000), a + 0.5);
-    const e = it.el.style;
-    e.animationDelay = '0s';
-    e.animationDuration = 'auto';
-    e.animationFillMode = 'both';
-    e.animationPlayState = 'running';
-    e.animationTimeline = 'scroll(root block)';
-    e.animationRange = a.toFixed(1) + 'px ' + b.toFixed(1) + 'px';
-  }
-  return true;
 }
 
 /* A coleta é adiada porque as animações só existem depois que o CSS resolve —
@@ -2000,32 +1853,6 @@ function atualizarProgressoPaineis(){
   if (!trilhoLarguraPainel) medirGeometriaDoTrilho();
 
   const largura = Agenda.w || 1;
-
-  /* NO CAMINHO DO COMPOSITOR NÃO HÁ NADA A MOVER POR QUADRO.
-
-     Cada elemento do jardim recebeu a sua faixa de rolagem e é o navegador que
-     o anima, junto com o painel em que ele está. O que resta aqui é garantir
-     que a ligação foi feita — e ela é feita UMA vez por elemento, assim que as
-     animações do CSS passam a existir (o que não acontece no primeiro quadro).
-     Depois disso este laço não escreve mais nada. */
-  if (HS_CSS_MOVE) {
-    for (const item of paineisComProgresso) {
-      if (item.ligado || item.cena === false) continue;
-
-      if (!item.cena) {
-        item.cena = coletarCena(item.el);
-        if (!item.cena) {
-          if ((item.tentativas = (item.tentativas || 0) + 1) > 120) item.cena = false;
-          continue;
-        }
-      }
-
-      if (ligarCenaNoScroll(item, largura)) item.ligado = true;
-    }
-
-    hsFaltaLigar = paineisComProgresso.some((it) => !it.ligado && it.cena !== false);
-    return;
-  }
 
   /* O percurso termina quando o painel ENCHE a tela:
 
@@ -2121,10 +1948,7 @@ let hsUltimoT = 0;
    `hsLinhaDesenhar` só escreve currentTime. É o que permite esta função morar
    na passada de desenho, depois de todo mundo ter medido. */
 function hsDesenhar(){
-  /* Com o CSS no comando o transform vem da animação ligada à rolagem, e uma
-     escrita inline aqui seria ignorada de qualquer forma (animação ganha de
-     estilo inline na cascata). Pular a escrita economiza a invalidação. */
-  if (!HS_CSS_MOVE) hsTrack.style.transform = `translate3d(${-hsCurrent}px, 0, 0)`;
+  hsTrack.style.transform = `translate3d(${-hsCurrent}px, 0, 0)`;
   atualizarProgressoPaineis();
   hsLinhaDesenhar(hsPercurso ? hsCurrent / hsPercurso : 0);
 }
@@ -2168,12 +1992,11 @@ function hsAplicar(){
    sozinha. O próximo evento de scroll religa. Ou seja, ela roda enquanto há
    movimento e some quando não há.
 
-   Vale para TODO celular, e não só para os que têm `animation-timeline`. Onde
-   o CSS não assume, quem move o trilho é este mesmo código — e aí ele sofre
-   duas vezes com o ritmo dos eventos: no trilho e no conteúdo. A bomba é o
-   que ele tem. Por isso a única condição aqui é a seção estar à vista: quem
-   decide que isto é um aparelho de toque é o caminho que chama a função, que
-   só existe no ramo sem amortecimento.
+   ELA É O QUE FAZ O CAMINHO DE JAVASCRIPT FUNCIONAR. Sem a bomba, o trilho, a
+   linha e o jardim andam no ritmo dos eventos de scroll — e foi assim que a
+   seção ficou "muito travada" antes de ela existir. Com ela, os três andam no
+   ritmo da tela, e andam JUNTOS, porque saem todos do mesmo `hsTarget`
+   calculado no mesmo quadro.
 
    No desktop ela nunca é chamada: lá o evento de scroll já chega uma vez por
    quadro, e quem sustenta a cauda do lerp é o `Agenda.pedirQuadro` do próprio
@@ -2185,14 +2008,6 @@ let hsYAnterior = -1;
 function hsBombear(){
   if (!hsVisivel) return;
 
-  /* Com a linha e o jardim ligados à rolagem, não sobra nada para atualizar
-     por quadro: o trilho, o traço e as flores são todos amostrados pelo
-     compositor, do mesmo valor e no mesmo quadro. A bomba existia para o
-     conteúdo acompanhar o trilho, e o conteúdo não precisa mais dela.
-
-     Ela continua valendo nos aparelhos de toque SEM `animation-timeline`, onde
-     este arquivo ainda é quem move tudo. */
-  if (HS_CSS_MOVE && !hsFaltaLigar) return;
 
   const y = Agenda.y;
   if (y !== hsYAnterior) {
@@ -2240,47 +2055,20 @@ function hsRender(){
 }
 
 function hsUpdate(){
-  /* COM O CSS NO COMANDO, A CONTA É EXATAMENTE A MESMA DA ANIMAÇÃO.
+  /* DUAS POSIÇÕES DE ROLAGEM E UMA REGRA DE TRÊS — e nada mais.
 
-     A linha desenhada e o jardim dos painéis continuam sendo posicionados
-     aqui, e eles precisam concordar com onde o trilho de fato está — se as
-     duas contas divergirem em um por cento que seja, a ponta do lápis descola
-     do painel e o efeito se desmancha.
+     Esta conta já foi feita com `rect.top` e a altura da seção, e as duas
+     coisas dependiam da altura da TELA, que no iPhone muda no meio do gesto
+     toda vez que a barra de endereço recolhe. As âncoras (`hsInicioDoc` e
+     `hsParadaDoc`) são posições de rolagem em coordenadas do documento,
+     medidas no layout a partir do `offsetTop`: nenhuma altura de tela entra
+     aqui, então nada aqui muda quando a barra se mexe.
 
-     Por isso a conta usa as MESMAS duas âncoras que foram para o CSS, e nada
-     mais: nem altura de tela, nem altura da seção. Duas posições de rolagem e
-     uma regra de três. */
-  if (HS_CSS_MOVE) {
-    const p = Math.min(Math.max(
-      (Agenda.y - hsInicioDoc) / (hsParadaDoc - hsInicioDoc), 0), 1);
-    hsTarget = p * hsPercurso;
-    return;
-  }
-
-  /* Só o caminho de JavaScript precisa do rect — e ele fica DEPOIS da saída
-     acima de propósito: no celular esta função roda em todo quadro, e uma
-     leitura de layout que ninguém usa é uma leitura a menos que se pode ter. */
-  const rect = hsOuter.getBoundingClientRect();
-
-  // hsAltura no lugar de hsOuter.offsetHeight: mesmo número, sem leitura de layout
-  /* `hsAlturaTela`, e não `window.innerHeight`, PELO MESMO MOTIVO do hsLayout
-     — e aqui a consistência é obrigatória, não preferência: esta conta desfaz
-     a que montou o hsAltura. Com dois números diferentes ela não devolve o
-     percurso desenhado. Medido num iPhone com a barra recolhida, o `total`
-     saía com 745 onde o hsAltura tinha usado 664, e o percurso horizontal
-     encolhia de 987px para 809px: os painéis andavam 22% mais rápido do que o
-     projetado e a faixa fechava antes da hora, mudando de ritmo toda vez que
-     a barra do navegador ia e voltava. Com a mesma altura dos dois lados a
-     conta se fecha exata no percurso desenhado, em qualquer aparelho.
-     Continua sendo leitura de variável, não de layout — o custo por quadro é
-     o mesmo de antes. */
-  const total = hsAltura - hsAlturaTela;
-
-  // reserva (1 + EXTRA_PIN_VH) telas pro pin/pausa, sem esticar o ritmo do scroll horizontal
-  const horizontalTotal = Math.max(total - hsAlturaTela * (1 + EXTRA_PIN_VH), 1);
-  const progress = Math.min(Math.max(-rect.top / horizontalTotal, 0), 1);
-
-  hsTarget = progress * hsPercurso;
+     E é este mesmo número que move o trilho, a linha desenhada e o jardim —
+     um valor, um quadro. Nada tem como sair de sincronia com nada. */
+  const p = Math.min(Math.max(
+    (Agenda.y - hsInicioDoc) / (hsParadaDoc - hsInicioDoc), 0), 1);
+  hsTarget = p * hsPercurso;
 }
 
 /* Tudo o que depende de uma medida da janela, na ordem: a altura da seção
@@ -2328,12 +2116,6 @@ function hsRefazerLayout(forcar){
   /* As faixas de rolagem são medidas em pixels do documento, então TODAS elas
      mudam quando o layout muda. Refazer as ligações é o que impede a linha e o
      jardim de continuarem apontando para a página antiga. */
-  if (HS_CSS_MOVE) {
-    hsLinhaLigarNoScroll();
-    for (const item of paineisComProgresso) item.ligado = false;
-    hsFaltaLigar = true;
-  }
-
   atualizarProgressoPaineis();
 }
 

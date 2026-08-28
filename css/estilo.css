@@ -389,84 +389,39 @@ body{
 }
 
 /* =========================================================================
-   O TRILHO MOVIDO PELO PRÓPRIO NAVEGADOR (celular e tablet)
+   POR QUE O TRILHO NÃO É MOVIDO POR `animation-timeline`
 
-   ESTE É O CONSERTO DO TRAVAMENTO NO CELULAR, e ele não é uma economia de
-   trabalho: é uma mudança de THREAD.
+   Ele já foi, e foi revertido — vale registrar, porque a ideia é boa e alguém
+   (eu inclusive) vai querer tentar de novo.
 
-   No celular a rolagem acontece na thread do COMPOSITOR — o dedo move a
-   página mesmo com a thread principal ocupada, e é por isso que a página em
-   si nunca engasga. O trilho, porém, era movido por JavaScript: evento de
-   scroll -> thread principal -> rAF -> escreve o transform. Duas
-   consequências, as duas ruins:
+   Mover o trilho por uma animação ligada à rolagem põe o movimento no
+   compositor, e no papel isso é perfeito: o painel gruda no dedo e o
+   JavaScript sai do caminho. Na prática, no iPhone, apareceu um salto que não
+   existia antes e que sobreviveu a todas as tentativas de conserto — âncoras
+   em pixels absolutos, guarda contra os `resize` da barra de endereço, linha e
+   jardim migrados para a mesma timeline. O salto começou junto com a timeline
+   e só sumiu quando ela saiu.
 
-     · o transform chega SEMPRE pelo menos um quadro depois da rolagem que o
-       causou. O fundo já andou, o trilho ainda não. Isso não é queda de FPS,
-       mas é exatamente o que se sente como uma;
-     · durante um arremesso (fling) o compositor entrega quadros a 120Hz e a
-       thread principal não acompanha. Aí os quadros do trilho passam a sair
-       aos pares, aos trios, e vira o travamento de verdade.
+   A explicação mais provável é que a faixa de uma timeline de rolagem é
+   sempre resolvida contra o percurso rolável, e o percurso rolável é
+   `scrollHeight - clientHeight`. No iPhone o `clientHeight` muda toda vez que
+   a barra de endereço recolhe — justamente quando se solta o dedo. Se a
+   conversão da faixa acontece na resolução do estilo e não a cada amostra, a
+   mesma posição de rolagem passa a valer outro ponto do percurso, e o trilho
+   pula. Não é algo que dê para contornar de dentro da página: qualquer faixa,
+   em px ou em porcentagem, é medida contra esse mesmo número.
 
-   Nenhuma otimização de JavaScript conserta isso, porque o problema não é o
-   custo do JavaScript — é o fato de ele estar na outra thread.
+   O que ficou no lugar está no js/script.js: o trilho volta a ser movido por
+   JavaScript, mas agora com a bomba de quadros (`hsBombear`) que faltava na
+   primeira versão — ela é que garante o ritmo da tela em vez do ritmo dos
+   eventos de scroll, que era o problema original. Linha e jardim são movidos
+   pelo MESMO número, no mesmo quadro, então nada tem como sair de sincronia.
 
-   `animation-timeline` resolve na raiz: a animação passa a ser amostrada pelo
-   COMPOSITOR, a partir do mesmo deslocamento de rolagem e no mesmo quadro. O
-   trilho fica grudado no dedo por construção, e o JavaScript deixa de
-   participar do movimento.
-
-   A FAIXA É MEDIDA EM PIXELS DE ROLAGEM, E ISSO NÃO É DETALHE.
-
-   A primeira versão disto usava `view-timeline` com faixa `contain`, que é
-   definida em relação à ALTURA DA TELA. No iPhone a barra de endereço encolhe
-   e cresce o tempo todo enquanto se rola, e cada vez que ela mexe a tela muda
-   de altura — então a faixa `contain` mudava de tamanho no meio do gesto e o
-   trilho pulava para outra posição. Era o "teletransporte".
-
-   `scroll(root block)` com a faixa em PIXELS resolve na raiz: `--hs-inicio` e
-   `--hs-parada` são posições de rolagem em coordenadas do documento, escritas
-   pelo js/script.js a cada layout. Elas não dependem da altura da tela, então
-   a barra do navegador pode ir e voltar à vontade — a mesma posição de
-   rolagem dá sempre o mesmo ponto do percurso.
-
-   As duas âncoras acima do trilho também são estáveis de propósito: o hero é
-   `100svh`, e `svh` é a MENOR altura possível da tela, um número que não muda
-   quando a barra recolhe. Se ele fosse `dvh`, o topo da seção andaria e o
-   pulo voltaria por outro caminho.
-
-   POR QUE SÓ NO TOQUE
-   No desktop o trilho é amortecido por lerp (ver HS_SUAVIDADE no
-   js/script.js), e esse amortecimento existe para absorver o pulo de ~100px
-   de cada clique da roda do mouse. Uma animação ligada à rolagem é exata: ela
-   devolveria o pulo. No toque não há pulo nenhum para absorver — o dedo já
-   entrega movimento contínuo e o navegador ainda dá a inércia por cima —,
-   então lá o exato é justamente o que se quer.
-
-   Sem suporte, nada disto existe e o caminho de JavaScript continua sendo o
-   único. É adição, não substituição.
+   A onda, a foto do contato e o texto do "sobre mim" CONTINUAM em
+   `animation-timeline`, e continuam ótimos: nenhum dos três é multiplicado por
+   1,58 como o percurso horizontal, então um deslize de faixa que ali passa
+   despercebido, aqui virava um salto de quase cem pixels.
    ========================================================================= */
-
-@keyframes hsCorre{
-  from{ transform: translate3d(0, 0, 0); }
-  to  { transform: translate3d(calc(var(--hs-percurso, 0px) * -1), 0, 0); }
-}
-
-@supports (animation-timeline: view()){
-  @media (hover: none), (pointer: coarse){
-    /* As longhands são de propósito: o atalho `animation` REINICIA
-       `animation-timeline` e `animation-range` para o valor inicial, e as duas
-       linhas abaixo seriam apagadas por ele dependendo da ordem. */
-    .hs-track{
-      animation-name: hsCorre;
-      animation-duration: auto;
-      animation-timing-function: linear;
-      animation-fill-mode: both;
-      animation-timeline: scroll(root block);
-      animation-range: var(--hs-inicio, 0px) var(--hs-parada, 100%);
-    }
-  }
-}
-
 
 /* O `will-change` NÃO VALE A PÁGINA INTEIRA.
 
@@ -541,16 +496,6 @@ body{
      No <svg> as fatias compõem entre si em alfa cheio e a opacidade vale pro
      conjunto. */
   opacity: .85;
-}
-
-/* Os quadros que as fatias usam quando estão ligadas à rolagem (ver
-   `hsLinhaLigarNoScroll` no js/script.js). Os dois valores vêm de variáveis
-   escritas por lá, uma vez por layout: `--dash` é a fatia inteira escondida e
-   `--feito` é ela inteira desenhada. Quem escolhe QUANDO cada uma acontece é a
-   `animation-range` de cada `<path>`. */
-@keyframes hsLinhaDesenha{
-  from{ stroke-dashoffset: var(--dash); }
-  to  { stroke-dashoffset: var(--feito); }
 }
 
 .hs-linha path{
