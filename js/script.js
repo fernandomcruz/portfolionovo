@@ -1605,7 +1605,11 @@ function hsLinhaDesenhar(prog){
    Dentro de UMA fatia a interpolação volta a ser linear, e isso é exato o
    bastante: são 80 a 105 fatias, cada uma cobrindo cerca de 1% do traço.
    ========================================================================= */
-const LINHA_AMOSTRAS_FAIXA = 900;
+/* A precisão com que as fronteiras entre fatias são encontradas. 3000 amostras
+   dão umas 25 por fatia mesmo no trecho em que a ponta corre mais rápido (as
+   duas bordas, por causa do `LINHA.aceleracao`), o que garante que duas fatias
+   nunca caiam na mesma fronteira e acendam juntas. Custa uma vez por layout. */
+const LINHA_AMOSTRAS_FAIXA = 3000;
 
 function hsLinhaLigarNoScroll(){
   if (!hsLinha || !hsLinha.pronta || !hsLinha.tabelaX) return;
@@ -2826,7 +2830,10 @@ window.addEventListener('load', () => {
     animacoes = Array.from(bioEl.querySelectorAll('.bio-word'))
       .map((w) => w.getAnimations()[0])
       .filter(Boolean);
-    animacoes.forEach((a) => a.pause());
+    /* Pausar só faz sentido quando é este arquivo que vai empurrar o ponteiro;
+       ligadas à rolagem, elas continuam correndo e quem escolhe o instante é a
+       faixa de cada uma. */
+    if (!BIO_CSS) animacoes.forEach((a) => a.pause());
     return animacoes.length > 0;
   }
 
@@ -2920,6 +2927,72 @@ window.addEventListener('load', () => {
     if (!animacoes.length && !pegarAnimacoes()) return;
     bioDesenhado = bioPendente;
     posicionarPalavras(bioPendente);
+  }
+
+  /* =======================================================================
+     AS PALAVRAS TAMBÉM VÃO PARA A ROLAGEM
+
+     Mesma história do trilho, da onda, da linha e da foto — e o último lugar
+     da página onde ela ainda valia. As 57 palavras eram posicionadas por
+     `currentTime` escrito daqui, e este código só acorda quando chega um
+     EVENTO de scroll. No iOS esses eventos chegam aos punhados durante um
+     arremesso, então o texto se revelava a uns 20Hz numa tela de 120Hz.
+
+     A CONTA JÁ ESTAVA PRONTA PARA A CONVERSÃO: `inicio` e `fim` no `medir`
+     abaixo são posições de rolagem em coordenadas do documento, não frações da
+     tela. É exatamente o que uma `scroll(root block)` com faixa em pixels
+     precisa — sem conversão nenhuma, e sem a barra de endereço do celular
+     poder mexer no resultado.
+
+     Cada palavra ocupa a sua fatia do percurso: a de índice `i` começa em
+     `i * passo` e dura `DURACAO_PALAVRA`, os mesmos números que o
+     `posicionarPalavras` usava. As três propriedades animadas (opacity,
+     translateY e o blur) são todas do tipo que o compositor sabe animar.
+     ===================================================================== */
+  const BIO_CSS =
+    !!(window.CSS && CSS.supports && CSS.supports('animation-timeline: scroll(root block)'));
+
+  function ligarPalavrasNoScroll(){
+    if (!animacoes.length && !pegarAnimacoes()) return false;
+    if (!bioMedido) medirGeometriaBio();
+
+    const h = Agenda.h || 1;
+    const inicio = bioTopoDoc - h * 0.88;
+    let fim = bioTopoDoc - h * 0.38;
+    if (fim > bioMaxScroll) fim = bioMaxScroll;
+
+    const curso = fim - inicio;
+    if (curso <= 0) return false;
+
+    const palavras = bioEl.querySelectorAll('.bio-word');
+    palavras.forEach((palavra, i) => {
+      const a = inicio + (i * passo) * curso;
+      const b = Math.max(inicio + (i * passo + DURACAO_PALAVRA) * curso, a + 0.5);
+      const e = palavra.style;
+      e.animationDelay = '0s';
+      e.animationDuration = 'auto';
+      e.animationFillMode = 'both';
+      e.animationPlayState = 'running';
+      e.animationTimeline = 'scroll(root block)';
+      e.animationRange = a.toFixed(1) + 'px ' + b.toFixed(1) + 'px';
+    });
+    return true;
+  }
+
+  if (BIO_CSS) {
+    /* As animações do CSS só existem depois que o estilo resolve, e a altura da
+       página só assenta depois das fontes e do hsLayout — daí as tentativas.
+       Nenhuma delas roda em quadro de rolagem. */
+    let tentativas = 0;
+    const ligar = () => {
+      if (ligarPalavrasNoScroll() || ++tentativas > 40) return;
+      setTimeout(ligar, 120);
+    };
+    Agenda.resize(() => { medirGeometriaBio(); ligarPalavrasNoScroll(); });
+    window.addEventListener('load', () => { medirGeometriaBio(); ligarPalavrasNoScroll(); }, { once: true });
+    if (document.fonts) document.fonts.ready.then(() => { medirGeometriaBio(); ligarPalavrasNoScroll(); });
+    ligar();
+    return;
   }
 
   Agenda.scroll(medir);
