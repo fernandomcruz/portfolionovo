@@ -1298,6 +1298,24 @@ function linhaSubdividir(seg, n){
 
 const hsLinha = (() => {
   if (!hsTrack) return null;
+
+  /* A LINHA É UM EFEITO DE TELA GRANDE, E SÓ.
+
+     No celular ela nunca conseguiu andar junto com os painéis. O motivo é
+     estrutural e está detalhado no `hsLinhaLigarNoScroll`: ela se revela por
+     `stroke-dashoffset`, nenhum motor compõe propriedade de SVG, e no iOS a
+     rolagem vive em outro processo — então ou ela ficava para trás do trilho
+     (o salto), ou o trilho vinha para a thread dela (o FPS baixo). As duas
+     saídas custavam mais do que o efeito entrega numa tela de 6 polegadas,
+     onde o traço tem 12px e some atrás das palavras.
+
+     Aqui ela simplesmente não é construída: nenhum <svg>, nenhum dos 105
+     <path>, nenhuma animação, nenhuma conta por quadro. O resto da seção — o
+     trilho no compositor e o jardim — continua igual.
+
+     `APARELHO_DE_TOQUE` é a mesma pergunta que separa notebook e PC de celular
+     e tablet no resto do arquivo: existe um ponteiro fino e hover de verdade. */
+  if (APARELHO_DE_TOQUE) return null;
   const svg = document.createElementNS(LINHA_NS, 'svg');
   svg.setAttribute('class', 'hs-linha');
   svg.setAttribute('aria-hidden', 'true');
@@ -2404,7 +2422,8 @@ Agenda.pintar(hsRender);      // desenha, depois de todas as medidas
      Sem `unobserve`: passar de novo redesenha, que é o comportamento que a
      versão ligada ao scroll tinha ao rolar de volta. A classe sai quando a
      seção some, e as animações voltam ao início pelo `animation-play-state`. */
-  if (HS_CSS_MOVE) {
+  /* Só existe onde existe linha — ou seja, em notebook e PC. */
+  if (HS_CSS_MOVE && hsLinha) {
     new IntersectionObserver((entradas) => {
       hsOuter.classList.toggle('hs-desenhando', entradas[0].isIntersecting);
     }, { threshold: 0 }).observe(hsOuter);

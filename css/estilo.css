@@ -2991,17 +2991,14 @@ body{
    `translateY`. Cobrir com uma cor sólida idêntica ao fundo e recortar dão o
    mesmo pixel; a diferença é que `translateY` o compositor faz sem repintar.
 
-   A FOTO NÃO SE MOVE MAIS. Aqui havia também um `translateY` de 34px na
-   imagem, o "empurrãozinho para o movimento ter peso". Ele acompanhava a
-   rolagem, e no celular o que se via era a foto subindo e descendo junto com
-   o dedo em vez de ficar parada sendo revelada. Saiu, e a cortina perdeu junto
-   o translate gêmeo que existia só para acompanhá-lo.
+   A FOTO NÃO SE MOVE E NÃO ESMAECE. Aqui havia mais duas coisas montadas em
+   cima da revelação: um `translateY` de 34px, que fazia a foto subir e descer
+   junto com o dedo em vez de ficar parada, e um `opacity` de 0 a 1, que a
+   deixava fantasma enquanto a janela abria. As duas saíram.
 
-   O que restou é o gesto que a pessoa realmente vê: a janela abrindo de cima
-   para baixo, com a foto quieta no lugar. */
-.bio-retrato.retrato-scrub img{
-  opacity: var(--rp, 1);
-}
+   O que restou é só o gesto: a janela descendo de cima para baixo, com a foto
+   inteira e opaca desde o primeiro pixel revelado — o recorte aparece com o
+   contraste que ele tem, não desbotado. */
 
 .bio-retrato.retrato-scrub::after{
   content: '';
@@ -3039,11 +3036,6 @@ body{
    suaviza as duas pontas. `cubic-bezier(1/3, 0, 2/3, 1)` é ele exatamente: com
    os controles em x = 1/3 e 2/3 o eixo x fica linear, e os y de 0 e 1 dão
    3t²-2t³ na saída. Não é parecido, é a mesma curva. */
-@keyframes retratoAparece{
-  from{ opacity: 0; }
-  to  { opacity: 1; }
-}
-
 @keyframes retratoCortina{
   from{ transform: translateY(0); }
   to  { transform: translateY(100%); }
@@ -3055,24 +3047,25 @@ body{
     view-timeline-axis: block;
   }
 
-  .bio-retrato.retrato-scrub img,
+  /* Só a cortina anima: a imagem não tem mais nada a fazer. */
   .bio-retrato.retrato-scrub::after{
+    animation-name: retratoCortina;
     animation-duration: auto;
     animation-fill-mode: both;
     animation-timing-function: cubic-bezier(.3333, 0, .6667, 1);
     animation-timeline: --retrato;
     animation-range: entry 35% entry 120%;
   }
-
-  .bio-retrato.retrato-scrub img{ animation-name: retratoAparece; }
-  .bio-retrato.retrato-scrub::after{ animation-name: retratoCortina; }
 }
 
 /* Cinto e suspensório: o JS já sai de cena sozinho com "reduzir movimento"
    ligado (e aí a classe acima nem chega a entrar). Isto cobre só o caso de o
    CSS e o script chegarem ao navegador em versões diferentes. */
+/* Na FIGURA, e não na imagem: desde que a revelação virou uma cortina, quem lê
+   o `--rp` é o `::after` do `.bio-retrato`. Posto na imagem, este cinto de
+   segurança não alcançava mais a cortina e a foto ficaria coberta. */
 @media (prefers-reduced-motion: reduce){
-  .bio-retrato.retrato-scrub img{ --rp: 1; }
+  .bio-retrato.retrato-scrub{ --rp: 1; }
 }
 
 .contato-label{
@@ -3576,7 +3569,19 @@ body{
     margin-left: var(--gutter);
     --corpo: min(16vw, calc((100vw - var(--gutter) - 10px) / 5.55));
   }
-  .hs-panel--mid .texto{ margin-left: var(--gutter); }
+  /* MAIS RESPIRO ENTRE UM PAINEL E O SEGUINTE.
+
+     Os painéis têm 100vw cada e os textos são alinhados à esquerda, então o
+     vão que se vê ao arrastar é `100vw menos a largura da palavra` — no
+     celular isso dava uns 40px entre o "DEVELOPER" e o "I DESIGN.", perto
+     demais para as duas lerem como duas coisas.
+
+     Empurrar só os painéis do MEIO aumenta todos esses vãos de uma vez, sem
+     mexer no primeiro (que é a abertura e fica encostado na margem). O teto é
+     a largura da palavra mais larga desses painéis: são 8 caracteres num corpo
+     de `min(16vw, ...)`, o que numa tela de 375px deixa uns 30px de folga
+     depois deste empurrão. */
+  .hs-panel--mid .texto{ margin-left: calc(var(--gutter) + 8vw); }
 }
 
 
