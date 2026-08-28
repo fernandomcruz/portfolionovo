@@ -238,6 +238,7 @@ const SIGNATURE_DATA = {"color":"#D4FB06","bbox":[40.2,74.0,1901.8,884.0],"strok
   function layout() {
     loteAberto = false;                        // o transform vai mudar debaixo dele
     const b = boxOf(stage);
+    caixaW = b.w; caixaH = b.h;                // a medida que o onResize compara
     const cw = Math.max(1, b.w);
     const ch = Math.max(1, b.h);
     const dpr = Math.min(window.devicePixelRatio || 1, 3);
@@ -413,11 +414,42 @@ const SIGNATURE_DATA = {"color":"#D4FB06","bbox":[40.2,74.0,1901.8,884.0],"strok
     fecharLote();      // fecha o que sobrou do quadro
   }
 
+  /* ==========================================================================
+     O RELÓGIO É ACUMULADO E TEM TETO — e é isto que deixa a escrita lisa.
+
+     Aqui estava `elapsed = now - startedAt`: o tempo absoluto desde o início.
+     Parece o jeito certo de animar, e é — desde que os quadros cheguem
+     regularmente. Só que estes não chegam: a assinatura começa a ser escrita
+     no instante mais concorrido da página, logo depois de a cortina do
+     preloader subir, com a digitação do typed.js, as fontes assentando e as
+     entradas do hero disputando a mesma thread.
+
+     Com o tempo absoluto, um quadro que demora 90ms em vez de 16 não atrasa a
+     caneta: ele a TELETRANSPORTA 90ms de percurso adiante, de uma vez. O
+     desenho não fica lento, fica aos solavancos — que é exatamente o que se
+     via. (Medi o custo do desenho em si: 0,3ms para a assinatura INTEIRA, uns
+     0,002ms por quadro. Nunca foi o desenho.)
+
+     Acumulando o tempo com um teto por quadro, um engasgo vira atraso em vez
+     de salto: a caneta continua de onde estava, no ritmo dela. O preço é a
+     escrita terminar alguns milésimos depois do previsto quando há
+     engasgo — invisível, e o oposto do que se perdia.
+
+     O teto de 34ms são dois quadros de 60Hz: o suficiente para absorver a
+     variação normal sem deixar a escrita arrastar quando o aparelho está bem.
+     ======================================================================== */
+  const PASSO_MAX = 34;
+  let ultimoQuadro = 0;
+
   function frame(now) {
     if (!playing) return;
-    elapsed = now - startedAt;
+
+    const dt = ultimoQuadro ? Math.min(now - ultimoQuadro, PASSO_MAX) : 0;
+    ultimoQuadro = now;
+    elapsed += dt;
+
     paintUpTo(Math.min(elapsed, TOTAL));
-    if (elapsed >= TOTAL) { playing = false; rafId = 0; return; }
+    if (elapsed >= TOTAL) { playing = false; rafId = 0; ultimoQuadro = 0; return; }
     rafId = requestAnimationFrame(frame);
   }
 
@@ -432,6 +464,7 @@ const SIGNATURE_DATA = {"color":"#D4FB06","bbox":[40.2,74.0,1901.8,884.0],"strok
     playing = true;
     everPlayed = true;
     startedAt = performance.now();
+    ultimoQuadro = 0;                          // o primeiro quadro não avança nada
     rafId = requestAnimationFrame(frame);
   }
 
@@ -448,19 +481,40 @@ const SIGNATURE_DATA = {"color":"#D4FB06","bbox":[40.2,74.0,1901.8,884.0],"strok
   }
 
   /* --- redimensionar: redesenha o estado atual na nova escala --------------- */
+  /* O REDESENHO SÓ ACONTECE SE A CAIXA MUDOU DE VERDADE.
+
+     Refazer o layout aqui não é barato como o desenho: `canvas.width = ...`
+     joga fora o buffer inteiro e aloca outro, e a assinatura tem de ser
+     reconstruída do zero por cima. No meio da escrita isso é um engasgo
+     visível.
+
+     E o observer dispara por muito menos do que uma tela nova. No computador o
+     `.assinatura-wrap` é `flex: 1 1 auto`, então cada linha que o typed.js
+     escreve embaixo muda a altura da caixa em alguns pixels — justamente
+     durante os 2,4s da escrita. Eram vários redesenhos completos no pior
+     momento possível.
+
+     Um pixel de tolerância separa "a caixa mudou" de "o texto de baixo
+     respirou". */
   let resizeTimer = 0;
+  let caixaW = 0, caixaH = 0;
+
   function onResize() {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       if (!stageReady()) return;
       if (!everPlayed && !playing) return;     // nada escrito ainda: nada a refazer
+
+      const b = boxOf(stage);
+      if (Math.abs(b.w - caixaW) < 1 && Math.abs(b.h - caixaH) < 1) return;
+      caixaW = b.w; caixaH = b.h;
+
       prepararTracos();
       const t = playing ? elapsed : (everPlayed ? TOTAL : 0);
       layout();
       clearPaper();
       resetPen();
       paintUpTo(Math.min(t, TOTAL));           // reconstrói só o que já foi escrito
-      if (playing) startedAt = performance.now() - elapsed;
     }, 80);
   }
 

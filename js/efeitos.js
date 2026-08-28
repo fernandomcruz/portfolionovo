@@ -642,12 +642,22 @@
     // para as chamadas avulsas, que não acontecem dentro de um quadro da Agenda
     function pintar(){ medir(); aplicar(); }
 
-    Agenda.scroll(medir);      // mede
-    Agenda.pintar(aplicar);    // escreve, depois de todo mundo ter medido
-    Agenda.resize(pintar);
-    window.addEventListener('load', pintar, { once: true });
-    if (document.fonts) document.fonts.ready.then(pintar);
-    pintar();
+    /* Com a revelação ligada à rolagem em CSS (ver `retratoAparece` no
+       css/estilo.css), não há nada a medir nem a escrever por quadro: a faixa
+       `entry 35% -> 120%` é a mesma conta do `percurso` daqui, e a curva
+       `cubic-bezier(1/3,0,2/3,1)` é o mesmo smoothstep. O `--rp` deixa de ser
+       escrito e as duas propriedades passam a ser animadas pelo compositor. */
+    const RETRATO_CSS =
+      !!(window.CSS && CSS.supports && CSS.supports('animation-timeline: view()'));
+
+    if (!RETRATO_CSS) {
+      Agenda.scroll(medir);      // mede
+      Agenda.pintar(aplicar);    // escreve, depois de todo mundo ter medido
+      Agenda.resize(pintar);
+      window.addEventListener('load', pintar, { once: true });
+      if (document.fonts) document.fonts.ready.then(pintar);
+      pintar();
+    }
   })();
 
 
