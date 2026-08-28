@@ -4,6 +4,15 @@
    recebe a versão estática de tudo (nada de loop infinito, parallax, etc).
    ========================================================================= */
 
+/* APARELHO DE TOQUE — declarado aqui em cima porque dois módulos precisam dele
+   antes de o arquivo terminar de ser lido (a onda, lá pelo meio, e o scroll
+   horizontal, mais adiante). Ele existe por causa de UMA diferença de
+   comportamento que só o toque tem: a barra de endereço, que aparece e some
+   durante a rolagem e dispara `resize` sem que nada de layout tenha mudado de
+   verdade. */
+const APARELHO_DE_TOQUE =
+  !window.matchMedia || window.matchMedia('(hover: none), (pointer: coarse)').matches;
+
 const PREFERE_MENOS_MOVIMENTO =
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -800,12 +809,68 @@ function montarOnda(vw){
   waveCapPath.setAttribute('d', buildCapWavePath(vw));
 }
 
+/* Quem escreve o scaleY: o navegador ou este arquivo. Mesma pergunta do
+   HS_CSS_MOVE, e sem o recorte de "só no toque" — aqui não há amortecimento
+   nenhum para preservar no desktop, então o compositor é melhor em todo lugar
+   que o suporta. A condição espelha o `@supports` do css/estilo.css. */
+const ONDA_CSS =
+  !!(window.CSS && CSS.supports && CSS.supports('animation-timeline: scroll(root block)'));
+
 function aplicarWaveCap(onda){
   lastWaveKey = onda.key;
   montarOnda(onda.vw);
+  if (ONDA_CSS) return;   // o transform vem da animação ligada à rolagem
   /* progress² é o mesmo expoente que estava no `rise` — ver buildCapWavePath */
   const p = onda.progress;
   waveCapSvg.style.transform = `scaleY(${(p * p).toFixed(5)})`;
+}
+
+/* AS ÂNCORAS DA ONDA, EM POSIÇÃO DE ROLAGEM.
+
+   `--onda-inicio` é o scrollY em que a crista começa a subir e `--onda-fim`
+   onde ela termina de se formar — as mesmas duas fronteiras que o
+   `medirWaveCap` usa, só que resolvidas para posições absolutas do documento
+   em vez de recalculadas a cada quadro contra a tela.
+
+   O `offsetTop` somado até a raiz, e não `rect.top + scrollY`, pelo mesmo
+   motivo do trilho: no iPhone as duas leituras podem discordar por uma
+   fração de segundo enquanto a barra de endereço se move, e a âncora sairia
+   deslocada pela altura dela.
+
+   O GUARDA DE RESIZE É A OUTRA METADE. `TRIGGER_START` é a altura da tela, e
+   no celular ela muda toda vez que a barra recolhe. Recalcular ali no meio
+   moveria as âncoras com a rolagem em curso — que é exatamente o salto que se
+   quer evitar. Largura igual e altura praticamente igual: não é resize, é a
+   barra do navegador. Passa direto. */
+let ondaLarguraLayout = -1;
+let ondaAlturaLayout = -1;
+
+function ondaLayout(forcar){
+  const W = window.innerWidth || 0;
+  const H = window.innerHeight || 0;
+  if (W < 2 || H < 2) return;
+
+  /* O guarda vale SÓ no toque. Num computador, mudar a altura da janela é
+     sempre um resize de verdade e o layout tem de acompanhar — ignorá-lo
+     deixaria a onda calibrada para uma tela que não existe mais. */
+  if (!forcar && APARELHO_DE_TOQUE &&
+      W === ondaLarguraLayout && ondaAlturaLayout > 0 &&
+      Math.abs(H - ondaAlturaLayout) / ondaAlturaLayout < 0.05) {
+    return;
+  }
+
+  ondaLarguraLayout = W;
+  ondaAlturaLayout = H;
+  TRIGGER_START = H;
+
+  montarOnda(W);
+
+  let topo = 0;
+  for (let el = conteudoEl; el; el = el.offsetParent) topo += el.offsetTop;
+  waveCap?.style.setProperty('--onda-inicio', Math.round(topo - TRIGGER_START) + 'px');
+  waveCap?.style.setProperty('--onda-fim', Math.round(topo - TRIGGER_END) + 'px');
+
+  lastWaveKey = '';   // força o redesenho na nova medida, no caminho sem CSS
 }
 
 function desenharWaveCap(){
@@ -821,26 +886,27 @@ function desenharWaveCap(){
    fila de escrita. */
 let ondaPendente = null;
 
-Agenda.scroll(() => { ondaPendente = medirWaveCap(); });
-Agenda.pintar(() => {
-  if (!ondaPendente) return;
-  aplicarWaveCap(ondaPendente);
-  ondaPendente = null;
-});
-Agenda.resize(() => {
-  TRIGGER_START = window.innerHeight;
-  lastWaveKey = '';               // força o redesenho na nova largura
-  desenharWaveCap();
-});
-desenharWaveCap();
+/* Com o CSS no comando não há nada a medir por quadro: o caminho é montado no
+   layout e o resto é do compositor. Sem ele, a dupla medir/pintar de sempre. */
+if (!ONDA_CSS) {
+  Agenda.scroll(() => { ondaPendente = medirWaveCap(); });
+  Agenda.pintar(() => {
+    if (!ondaPendente) return;
+    aplicarWaveCap(ondaPendente);
+    ondaPendente = null;
+  });
+}
+
+Agenda.resize(() => ondaLayout());
+ondaLayout(true);
+if (!ONDA_CSS) desenharWaveCap();
 
 /* Rede de segurança para o caso acima: se a primeira chamada caiu na guarda de
    largura zero, ninguém mais desenharia até a pessoa rolar ou redimensionar.
    Uma passada no `load`, com a medida já boa, fecha esse buraco. */
 window.addEventListener('load', () => {
-  TRIGGER_START = window.innerHeight;
-  lastWaveKey = '';
-  desenharWaveCap();
+  ondaLayout(true);
+  if (!ONDA_CSS) desenharWaveCap();
 }, { once: true });
 
 
@@ -1582,7 +1648,7 @@ function hsLayout(){
     clearTimeout(hsLayoutRetentativa);
     /* refaz a SEQUÊNCIA inteira, e não só esta função: a geometria do trilho e
        o alvo do pin saem das mesmas medidas que acabaram de faltar */
-    hsLayoutRetentativa = setTimeout(hsRefazerLayout, 250);
+    hsLayoutRetentativa = setTimeout(() => hsRefazerLayout(true), 250);
     return;
   }
   clearTimeout(hsLayoutRetentativa);
@@ -1610,10 +1676,21 @@ function hsLayout(){
      mudar de categoria (girar um tablet, plugar um mouse). */
   hsPercurso = percurso;
 
-  /* `rect.top + scrollY` é a posição do topo da seção em coordenadas do
-     DOCUMENTO. Fora de um quadro da Agenda o `Agenda.y` lê na hora, que é o
-     que se quer aqui — esta função roda no layout, não no scroll. */
-  hsInicioDoc = Math.round(hsOuter.getBoundingClientRect().top + Agenda.y);
+  /* A ÂNCORA SAI DO LAYOUT PURO, SEM A POSIÇÃO DE ROLAGEM NA CONTA.
+
+     Aqui estava `rect.top + scrollY`, que dá o mesmo número — desde que as
+     duas leituras enxerguem o mesmo instante. No iPhone elas nem sempre
+     enxergam: a barra de endereço recolhe, o Safari ajusta a rolagem para
+     manter o conteúdo no lugar, e por uma fração de segundo o `rect.top` já é
+     o novo e o `scrollY` ainda é o antigo (ou o contrário). A soma sai errada
+     pela altura da barra, a âncora inteira desliza e o trilho salta.
+
+     A soma dos `offsetTop` até a raiz é geometria pura: não passa perto da
+     rolagem, então não tem como discordar dela. Confere com a outra conta ao
+     pixel quando as duas estão em dia. */
+  let topo = 0;
+  for (let el = hsOuter; el; el = el.offsetParent) topo += el.offsetTop;
+  hsInicioDoc = Math.round(topo);
   hsParadaDoc = hsInicioDoc + Math.max(rolagemHorizontal, 1);
 
   hsTrack.style.setProperty('--hs-percurso', percurso.toFixed(2) + 'px');
@@ -2025,14 +2102,47 @@ function hsUpdate(){
    (que é o percurso do pin), a geometria do trilho e o alvo. É a mesma
    sequência do resize e da retentativa do `hsLayout` — um lugar só, para as
    três não poderem sair de sincronia. */
-function hsRefazerLayout(){
+/* A BARRA DE ENDEREÇO DO CELULAR NÃO É UM RESIZE DE VERDADE.
+
+   E é ela a causa do salto que sobrava. No iPhone, recolher ou mostrar a barra
+   dispara `resize` — dezenas de vezes durante uma rolagem, sempre no instante
+   em que se solta o dedo. Cada um desses eventos refazia o layout inteiro da
+   seção: reescrevia a altura do `#hsOuter`, remedia a âncora, recalculava o
+   percurso. Tudo isso no meio do gesto, com a página em movimento.
+
+   O que a seção realmente precisa saber é: a LARGURA mudou (o percurso é
+   medido em larguras de painel) ou a altura presa mudou de verdade (girar o
+   aparelho)? A barra de endereço não muda nem uma nem outra — a largura fica
+   igual e a altura presa é `100svh`, que por definição já é a altura COM a
+   barra à mostra e não se mexe quando ela recolhe.
+
+   O piso de 5% na altura é a folga: separa a barra do navegador (uns 8% numa
+   tela de celular, mas sem tocar no svh) de uma rotação de tela, que muda
+   tudo. Qualquer mudança real passa; a barra não passa. */
+let hsLarguraLayout = -1;
+let hsAlturaLayout = -1;
+
+function hsRefazerLayout(forcar){
+  const W = window.innerWidth || 0;
+  const H = medirAlturaDaTelaPresa();
+
+  /* Mesma ressalva da onda: no computador todo resize é de verdade e passa. */
+  if (!forcar && APARELHO_DE_TOQUE &&
+      W === hsLarguraLayout && hsAlturaLayout > 0 &&
+      Math.abs(H - hsAlturaLayout) / hsAlturaLayout < 0.05) {
+    return;
+  }
+
+  hsLarguraLayout = W;
+  hsAlturaLayout = H;
+
   hsLayout();
   medirGeometriaDoTrilho();
   hsUpdate();
   atualizarProgressoPaineis();
 }
 
-hsRefazerLayout();
+hsRefazerLayout(true);
 
 /* O .hs-sticky não rola mais sozinho em largura nenhuma — quem move os
    painéis é sempre o pin, comandado pelo scroll da janela. O ouvinte de
@@ -2083,7 +2193,7 @@ Agenda.resize(hsRefazerLayout);
    aqui, o trilho ficaria no zero com a página já dentro da seção — os painéis
    parados no primeiro e a linha por desenhar, até o primeiro gesto. */
 window.addEventListener('load', () => {
-  hsRefazerLayout();
+  hsRefazerLayout(true);
   Agenda.pedirQuadro();
 }, { once: true });
 

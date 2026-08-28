@@ -112,7 +112,23 @@ body{
 
 /* ---------- Assinatura animada (canvas) ---------- */
 
+/* QUANTO DA CAIXA A ASSINATURA OCUPA.
+
+   Este número estava preso no `CONFIG.fillRatio` do js/assinatura.js, um valor
+   só para todas as telas. Trazido para cá, ele passa a ser o que já é na
+   prática: uma decisão de enquadramento, que muda com o tamanho da tela. O
+   js/assinatura.js lê esta variável no `layout()`; sem ela, cai no 0.82 de
+   antes e nada muda.
+
+   Por que ele pode subir tanto no celular: a assinatura tem proporção 2,15:1 e
+   a caixa do celular é quase quadrada, então quem limita é sempre a LARGURA —
+   medido em 375px de tela, o desenho ocupava 82% da largura e só 47% da
+   altura. Havia mais da metade da caixa vazia embaixo. Enchendo a largura,
+   nada é cortado: a altura desenhada vai de 126px para uns 162px numa caixa de
+   268px. */
 .assinatura-wrap{
+  --assinatura-fill: .82;
+
   flex: 1 1 auto;
   min-height: 180px;      /* garante caixa mesmo se o flex não resolver */
   display: flex;
@@ -270,6 +286,43 @@ body{
      por quadro por UMA rasterização, feita uma vez por largura de janela. O
      caminho nunca muda depois de montado, então a camada nunca é refeita. */
   will-change: transform;
+}
+
+/* E QUEM ESCREVE O scaleY É O NAVEGADOR, NÃO O JAVASCRIPT.
+
+   Mesma história do trilho do scroll lateral, e o mesmo conserto. Deixar o
+   `scaleY` para o JavaScript já tinha tirado a repintura do caminho, mas
+   sobrava o outro problema: quem escrevia só acordava quando chegava um
+   EVENTO de scroll, e no celular esses eventos chegam aos punhados. A onda
+   crescia aos degraus — os mesmos "20Hz dentro de uma tela de 120Hz" que
+   engasgavam o conteúdo dos painéis.
+
+   Ligada à rolagem em CSS, ela é amostrada pelo compositor: nenhum quadro
+   passa por aqui, nem um evento é esperado.
+
+   A CURVA NÃO É ENFEITE. O crescimento original é `progress²`, e progress é
+   linear na rolagem — então a animação precisa de uma curva que seja
+   exatamente x². `cubic-bezier(1/3, 0, 2/3, 1/3)` é ela: com os pontos de
+   controle em x = 1/3 e 2/3 o eixo x fica linear, e os y de 0 e 1/3 fazem a
+   saída valer t². Não é aproximação, é a mesma parábola.
+
+   As âncoras são posições de rolagem em px (ver `ondaLayout` no
+   js/script.js), pelo mesmo motivo do trilho: a barra de endereço do celular
+   não pode mexer no que já está em curso. */
+@keyframes ondaCresce{
+  from{ transform: scaleY(0); }
+  to  { transform: scaleY(1); }
+}
+
+@supports (animation-timeline: scroll(root block)){
+  .wave-cap svg{
+    animation-name: ondaCresce;
+    animation-duration: auto;
+    animation-timing-function: cubic-bezier(.3333, 0, .6667, .3333);
+    animation-fill-mode: both;
+    animation-timeline: scroll(root block);
+    animation-range: var(--onda-inicio, 0px) var(--onda-fim, 100%);
+  }
 }
 
 /* A SAIA DA ONDA — a emenda com a seção branca, parada.
@@ -3403,7 +3456,15 @@ body{
     height: clamp(170px, 33vh, 300px);
     min-height: 0;
     margin: auto 0;             /* centra no espaço que sobrou */
-    padding: 0 var(--gutter);
+
+    /* O recuo lateral era `var(--gutter)` (22,5px de cada lado numa tela de
+       375px), e é ele que estava segurando o tamanho: com a assinatura
+       limitada pela largura, cada pixel de recuo é um pixel a menos de
+       desenho. Encostando quase nas bordas e enchendo a caixa, o traço cresce
+       cerca de 28% sem que nada seja cortado — a folga toda estava na
+       vertical. */
+    padding: 0 6px;
+    --assinatura-fill: .96;
   }
 
   .overlay{ padding: 0 var(--gutter) 7vh; }

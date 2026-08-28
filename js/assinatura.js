@@ -236,12 +236,22 @@ const SIGNATURE_DATA = {"color":"#D4FB06","bbox":[40.2,74.0,1901.8,884.0],"strok
   }
 
   function layout() {
+    loteAberto = false;                        // o transform vai mudar debaixo dele
     const b = boxOf(stage);
     const cw = Math.max(1, b.w);
     const ch = Math.max(1, b.h);
     const dpr = Math.min(window.devicePixelRatio || 1, 3);
     const [bx, by, bw, bh] = DATA.bbox;
-    const sc = Math.min(cw / bw, ch / bh) * CONFIG.fillRatio;
+
+    /* O enquadramento vem do CSS (`--assinatura-fill` no .assinatura-wrap), e
+       não mais de um número fixo aqui: ele muda com o tamanho da tela, que é
+       uma decisão de layout e não de motor. O `CONFIG.fillRatio` continua
+       valendo como piso, para o caso de a variável não existir. */
+    const declarado = parseFloat(
+      getComputedStyle(stage).getPropertyValue('--assinatura-fill'));
+    const preencher = declarado > 0 ? declarado : CONFIG.fillRatio;
+
+    const sc = Math.min(cw / bw, ch / bh) * preencher;
 
     view.dpr = dpr; view.scale = sc; view.w = cw; view.h = ch;
     view.dx = (cw - bw * sc) / 2 - bx * sc;
@@ -261,6 +271,7 @@ const SIGNATURE_DATA = {"color":"#D4FB06","bbox":[40.2,74.0,1901.8,884.0],"strok
 
   // limpa mantendo o canvas transparente (o fundo escuro da página aparece)
   function clearPaper() {
+    loteAberto = false;                        // o que estivesse aberto some junto
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -275,9 +286,13 @@ const SIGNATURE_DATA = {"color":"#D4FB06","bbox":[40.2,74.0,1901.8,884.0],"strok
      ========================================================================== */
   const pen = { si: 0, i: 0, f: 0, down: false, x: 0, y: 0 };
 
-  function resetPen() { pen.si = 0; pen.i = 0; pen.f = 0; pen.down = false; }
+  function resetPen() {
+    pen.si = 0; pen.i = 0; pen.f = 0; pen.down = false;
+    loteAberto = false; loteW = -1;
+  }
 
   function penDown(st) {
+    fecharLote();                              // a gota não pode entrar no lote
     pen.x = st.x[0]; pen.y = st.y[0];
     pen.i = 0; pen.f = 0; pen.down = true;
     // a caneta encosta: primeira gota de tinta, do tamanho do traço naquele ponto
@@ -310,12 +325,57 @@ const SIGNATURE_DATA = {"color":"#D4FB06","bbox":[40.2,74.0,1901.8,884.0],"strok
     return st.w[i] + (st.w[j] - st.w[i]) * f;
   }
 
-  function segment(x0, y0, x1, y1, w0, w1) {
-    ctx.lineWidth = (w0 + w1) * 0.5;
-    ctx.beginPath();
-    ctx.moveTo(x0, y0);
-    ctx.lineTo(x1, y1);
+  /* ==========================================================================
+     UM TRAÇO POR LOTE, E NÃO UM POR SEGMENTO
+
+     São 2.604 pontos escritos em 2,4s: 18 segmentos por quadro a 60Hz. Cada um
+     era um `beginPath` + `moveTo` + `lineTo` + `stroke` — dezoito chamadas de
+     desenho por quadro, cada uma com as suas duas pontas arredondadas para o
+     antialiasing resolver. Num iPhone, com o canvas em 3x, é aí que a escrita
+     ganha aquele andar aos soluços: não é a conta que custa, é o número de
+     chamadas.
+
+     Segmentos vizinhos quase sempre têm a MESMA espessura — a caneta engrossa
+     e afina devagar. Arredondando a espessura em degraus de 0,25 unidade de
+     arte (menos de 2% do traço, invisível), os vizinhos passam a caber num
+     `Path2D` só, com um `stroke` no fim. As dezoito chamadas viram três ou
+     quatro.
+
+     E o desenho fica RIGOROSAMENTE igual — melhor, até: onde antes duas pontas
+     redondas se sobrepunham, agora há uma junta redonda de verdade
+     (`lineJoin: round`). Como a cor é opaca, sobreposição e junta pintam o
+     mesmo pixel.
+
+     A regra do lote: ele continua enquanto a espessura for a mesma E o próximo
+     segmento começar exatamente onde o anterior parou. Qualquer quebra fecha o
+     lote e abre outro. `fecharLote` é chamado no fim de cada quadro e antes de
+     qualquer outro desenho no contexto — uma gota de tinta, uma limpeza, uma
+     troca de transform. Path aberto atravessando uma dessas seria tinta no
+     lugar errado.
+     ======================================================================== */
+  let loteAberto = false, loteW = -1, loteX = 0, loteY = 0;
+
+  function fecharLote() {
+    if (!loteAberto) return;
     ctx.stroke();
+    loteAberto = false;
+  }
+
+  function segment(x0, y0, x1, y1, w0, w1) {
+    const w = Math.round((w0 + w1) * 2) / 4;   // degraus de 0,25
+
+    if (!loteAberto || w !== loteW || x0 !== loteX || y0 !== loteY) {
+      fecharLote();
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      loteW = w;
+      loteAberto = true;
+    }
+
+    ctx.lineTo(x1, y1);
+    loteX = x1;
+    loteY = y1;
   }
 
   // localiza (índice, fração) correspondente a um tempo local dentro do traço
@@ -350,6 +410,7 @@ const SIGNATURE_DATA = {"color":"#D4FB06","bbox":[40.2,74.0,1901.8,884.0],"strok
       inkTo(st, i, f);
       break;
     }
+    fecharLote();      // fecha o que sobrou do quadro
   }
 
   function frame(now) {
