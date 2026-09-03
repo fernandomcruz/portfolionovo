@@ -1188,11 +1188,16 @@ body{
   /* A seção é obrigada a ter uma tela de altura — é ela que cobre a tela de
      pausa do pin (o margin negativo acima). Só que o índice ocupa bem menos
      que isso, e centralizar no meio dessa altura jogava o título pra 222px do
-     topo, baixo demais.
-     Com o respiro de baixo bem maior que o de cima, a centralização passa a
-     cair mais acima: o bloco sobe e o título fica por volta de 115px. */
+     topo, baixo demais. O respiro de baixo maior que o de cima puxa a
+     centralização para cima e devolve o título a uma altura de título.
+
+     OS 36vh DE ANTES ERAM CALIBRADOS PARA QUATRO LINHAS. Com três, o índice
+     encolheu uma linha inteira e essa folga foi toda parar embaixo: numa tela
+     de 720px sobravam 259px de nada entre a última linha e o fim da seção —
+     mais que duas linhas da própria lista. 16vh mantém a assimetria que
+     levanta o bloco sem transformar o rodapé num vazio. */
   padding-top: 40px;
-  padding-bottom: clamp(140px, 36vh, 330px);
+  padding-bottom: clamp(96px, 16vh, 190px);
 }
 
 .portfolio-gallery{
@@ -1226,8 +1231,14 @@ body{
 
 .pj-lista{
   list-style: none;
-  /* respiro maior entre o título e a primeira linha */
-  margin: clamp(48px, 6.5vh, 88px) auto 0;
+  /* Respiro entre o título e a primeira linha.
+
+     O piso de 48px era o que valia na prática em telas de até ~740px de
+     altura (6.5vh só passa dos 48px acima disso), e 48px logo abaixo de um
+     título desse corpo lê como linha encostada — ainda mais com o rodapé da
+     seção sobrando. O piso agora acompanha o tamanho do título em vez de
+     ficar preso num número que só servia às telas altas. */
+  margin: clamp(64px, 8vh, 104px) auto 0;
   padding: 0;
   max-width: 1200px;
   width: 100%;
@@ -2730,7 +2741,7 @@ body{
 }
 
 .word span:nth-child(1).active{
-  animation: balance 1.5s ease-out;
+  animation: balance 1.05s ease-out;
   transform-origin: bottom left;
 }
 
@@ -2740,18 +2751,31 @@ body{
 }
 
 .word span:nth-child(2).active{
-  animation: shrinkjump 1s ease-in-out;
+  animation: shrinkjump .9s ease-in-out;
   transform-origin: bottom center;
 }
 
+/* OS SALTOS SÃO EM `em`, NÃO EM PIXEL, e é o mesmo problema que a
+   `perspective` do .word já tinha resolvido logo acima — com o mesmo fator.
+
+   O corpo destas letras é `clamp(24px, 16vw, 30rem)`: 60px num celular de
+   375, 410px num monitor de 2560. Com o salto travado em 150px, o "N" pulava
+   2,5 alturas de letra no celular (saía do painel) e 0,37 no monitor grande
+   (mal se via) — a mesma animação lida de sete jeitos diferentes conforme a
+   tela. Em `em` o salto passa a ser uma fração da própria letra e o gesto fica
+   igual em qualquer largura.
+
+   O divisor é 230,4 — o corpo num monitor de 1440, o mesmo de referência da
+   perspectiva. Então 150px ÷ 230,4 = .651em: a 1440 nada muda, e é só fora
+   dali que a conta começa a corrigir. */
 @keyframes shrinkjump{
   10%, 35% { transform: scale(2, .2) translate(0, 0); }
-  45%, 50% { transform: scale(1) translate(0, -150px); }
+  45%, 50% { transform: scale(1) translate(0, -.651em); }
   80%      { transform: scale(1) translate(0, 0); }
 }
 
 .word span:nth-child(3).active{
-  animation: falling 2s ease-out;
+  animation: falling 1.35s ease-out;
   transform-origin: bottom center;
 }
 
@@ -2765,22 +2789,24 @@ body{
 }
 
 .word span:nth-child(4).active{
-  animation: bounce 1.2s ease-out;
+  animation: bounce 1s ease-out;
   transform-origin: bottom center;
 }
 
+/* em vez de px, pelo motivo explicado no shrinkjump: 130 ÷ 230,4 = .564em,
+   45 → .195em, 12 → .052em */
 @keyframes bounce{
   0%   { transform: translateY(0) scaleY(1); }
-  20%  { transform: translateY(-130px) scaleY(1); }
+  20%  { transform: translateY(-.564em) scaleY(1); }
   40%  { transform: translateY(0) scaleY(0.65); }
-  55%  { transform: translateY(-45px) scaleY(1.1); }
+  55%  { transform: translateY(-.195em) scaleY(1.1); }
   70%  { transform: translateY(0) scaleY(0.85); }
-  85%  { transform: translateY(-12px) scaleY(1.05); }
+  85%  { transform: translateY(-.052em) scaleY(1.05); }
   100% { transform: translateY(0) scaleY(1); }
 }
 
 .word span:nth-child(5).active{
-  animation: toplong 1.5s linear;
+  animation: toplong 1.1s linear;
 }
 
 @keyframes toplong{
@@ -2789,7 +2815,7 @@ body{
 }
 
 .word span:nth-child(6).active{
-  animation: wiggle 1s ease-in-out;
+  animation: wiggle .9s ease-in-out;
   transform-origin: bottom center;
 }
 
@@ -2803,7 +2829,7 @@ body{
 }
 
 .word span:nth-child(7).active{
-  animation: rotate 1s ease-out;
+  animation: rotate .9s ease-out;
 }
 
 @keyframes rotate{
@@ -2815,15 +2841,17 @@ body{
    evento animationend, e sem @keyframes esse evento nunca dispara, o ponto
    ficava com a classe presa pra sempre — e não reagia a mais nenhum clique. */
 .word span:nth-child(8).active{
-  animation: dotdrop 1s cubic-bezier(.34, 1.56, .64, 1);
+  animation: dotdrop .9s cubic-bezier(.34, 1.56, .64, 1);
   transform-origin: bottom center;
 }
 
+/* em vez de px, pelo motivo explicado no shrinkjump: 80 ÷ 230,4 = .347em,
+   16 → .069em */
 @keyframes dotdrop{
   0%   { transform: translateY(0) scale(1); }
-  30%  { transform: translateY(-80px) scale(1.35); }
+  30%  { transform: translateY(-.347em) scale(1.35); }
   60%  { transform: translateY(0) scale(1.25, .75); }
-  80%  { transform: translateY(-16px) scale(1); }
+  80%  { transform: translateY(-.069em) scale(1); }
   100% { transform: translateY(0) scale(1); }
 }
 

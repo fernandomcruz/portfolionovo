@@ -2795,7 +2795,7 @@ window.addEventListener('load', () => {
 
 /* =========================================================================
    "I ANIMATE." — dispara a animação de cada letra ao clicar, e também
-   sozinho quando a palavra aparece na tela (esperando 1s antes de começar)
+   sozinho quando a palavra aparece na tela
    ========================================================================= */
 
 (function initAnimateLetters(){
@@ -2804,9 +2804,17 @@ window.addEventListener('load', () => {
 
   const spans = wordEl.querySelectorAll('span');
 
-  // AJUSTE AQUI:
-  const START_DELAY_MS = 100; // espera (em ms) depois que a palavra aparece na tela
-  const STAGGER_MS     = 350;  // intervalo entre uma letra e a próxima na sequência inicial
+  /* AJUSTE AQUI.
+
+     O passo entre as letras é o que decide o tamanho da sequência inteira:
+     são sete intervalos até a última começar. Em 350ms a palavra levava 2,5s
+     só pra chegar no ponto final — a primeira letra já tinha terminado e
+     voltado ao lugar antes da metade da palavra sair do lugar, e o que se via
+     era uma fila de letras avulsas, não uma onda. Em 190ms as animações se
+     sobrepõem, a onda existe, e a sequência inteira fecha em ~2,3s contra os
+     3,5s de antes. */
+  const START_DELAY_MS = 60;  // espera (em ms) depois que a palavra aparece na tela
+  const STAGGER_MS     = 190; // intervalo entre uma letra e a próxima na sequência inicial
 
   spans.forEach((span) => {
     span.addEventListener('click', (e) => {
@@ -2825,8 +2833,19 @@ window.addEventListener('load', () => {
     });
   }
 
-  /* A palavra espera estar de fato na tela. */
-  Viewport.aoEntrar([wordEl], { fracao: 0.9, horizontal: true, resgatar: false },
+  /* A palavra espera estar de fato na tela.
+
+     A FRAÇÃO É BAIXA DE PROPÓSITO. Aqui ela não mede "quanto da tela o
+     elemento ocupa", e sim quanto DO ELEMENTO está visível — e esta palavra
+     tem 983px de largura numa tela de 1280. Pedir 0.9 dela era esperar o
+     painel entrar 85% do percurso: a sequência só começava com a palavra já
+     quase parada no lugar, e quem rolava depressa chegava depois da festa.
+
+     Em 0.55 o disparo acontece com a palavra ainda entrando pela direita. As
+     quatro primeiras letras — que são justamente as quatro primeiras da
+     sequência — já estão visíveis nesse instante, e as últimas só se movem
+     perto de 1s depois, tempo de sobra para o painel terminar de assentar. */
+  Viewport.aoEntrar([wordEl], { fracao: 0.55, horizontal: true, resgatar: false },
     () => playInitialSequence());
 })();
 
